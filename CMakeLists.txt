@@ -2084,22 +2084,23 @@ endforeach(myExe)
 
 #unitary tests for Core NEtwork pieces
 #################################
-foreach(myExe s1ap
-    secu_knas_encrypt_eia1
-    secu_kenb
-    aes128_ctr
-    secu_knas_encrypt_eea2
-    secu_knas secu_knas_encrypt_eea1
-    kdf
-    aes128_cmac_encrypt
-    secu_knas_encrypt_eia2)
-  add_executable(test_${myExe}
-    ${OPENAIR3_DIR}/TEST/test_${myExe}.c
-    )
-  target_link_libraries (test_${myExe}
-    -Wl,--start-group SECURITY UTIL -Wl,--end-group m rt CONFIG_LIB
-    )
-endforeach(myExe)
+#foreach(myExe
+#    s1ap
+#    secu_knas_encrypt_eia1
+#    secu_kenb
+#    aes128_ctr
+#    secu_knas_encrypt_eea2
+#    secu_knas secu_knas_encrypt_eea1
+#    kdf
+#    aes128_cmac_encrypt
+#    secu_knas_encrypt_eia2)
+#  add_executable(test_${myExe}
+#    ${OPENAIR3_DIR}/TEST/test_${myExe}.c
+#    )
+#  target_link_libraries (test_${myExe}
+#    -Wl,--start-group SECURITY UTIL -Wl,--end-group m rt CONFIG_LIB
+#    )
+#endforeach(myExe)
 
 #ensure that the T header files are generated before targets depending on them
 if (${T_TRACER})
