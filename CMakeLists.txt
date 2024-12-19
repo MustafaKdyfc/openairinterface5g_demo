@@ -1930,14 +1930,14 @@ target_link_libraries(nr-uesoftmodem PRIVATE
 #####################################
 
 #special case for dlim TM4, which uses its own version of phy_scope code
-add_executable(dlsim_tm4
-  ${OPENAIR1_DIR}/SIMULATION/LTE_PHY/dlsim_tm4.c
-  ${OPENAIR1_DIR}/PHY/TOOLS/lte_phy_scope_tm4.c
-  )
-target_link_libraries (dlsim_tm4
-  -Wl,--start-group SIMU UTIL SCHED_LIB SCHED_RU_LIB PHY ITTI -Wl,--end-group
-  pthread m rt CONFIG_LIB ${T_LIB}
-  )
+#add_executable(dlsim_tm4
+#  ${OPENAIR1_DIR}/SIMULATION/LTE_PHY/dlsim_tm4.c
+#  ${OPENAIR1_DIR}/PHY/TOOLS/lte_phy_scope_tm4.c
+#  )
+#target_link_libraries (dlsim_tm4
+#  -Wl,--start-group SIMU UTIL SCHED_LIB SCHED_RU_LIB PHY ITTI -Wl,--end-group
+#  pthread m rt CONFIG_LIB ${T_LIB}
+#  )
 
 add_executable(rftest
   ${OPENAIR_DIR}/openair1/PHY/TOOLS/calibration_test.c
@@ -2062,7 +2062,9 @@ target_link_libraries(nr_ulsim PRIVATE
   )
 target_link_libraries(nr_ulsim PRIVATE asn1_nr_rrc_hdrs asn1_lte_rrc_hdrs)
 
-foreach(myExe dlsim dlsim_tm7 ulsim pbchsim scansim mbmssim pdcchsim pucchsim prachsim syncsim)
+# these simulators do not compile:
+# dlsim_tm7 pbchsim scansim mbmssim pdcchsim pucchsim prachsim syncsim
+foreach(myExe dlsim ulsim)
 
   add_executable(${myExe}
     ${OPENAIR1_DIR}/SIMULATION/LTE_PHY/${myExe}.c
