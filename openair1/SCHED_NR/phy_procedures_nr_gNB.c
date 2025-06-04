@@ -750,7 +750,7 @@ int fill_srs_channel_matrix(uint8_t *channel_matrix,
     for(int gI = 0; gI < num_gnb_antenna_elements; gI++) {
 
       uint16_t subcarrier = subcarrier_offset + nr_srs_info->k_0_p[uI][0];
-      if (subcarrier>frame_parms->ofdm_symbol_size) {
+      if (subcarrier >= frame_parms->ofdm_symbol_size) {
         subcarrier -= frame_parms->ofdm_symbol_size;
       }
 
@@ -769,7 +769,7 @@ int fill_srs_channel_matrix(uint8_t *channel_matrix,
         // Subcarrier increment
         subcarrier += step;
         if (subcarrier >= frame_parms->ofdm_symbol_size) {
-          subcarrier=subcarrier-frame_parms->ofdm_symbol_size;
+          subcarrier -= frame_parms->ofdm_symbol_size;
         }
       }
     }
@@ -1045,6 +1045,7 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
         nfapi_nr_srs_pdu_t *srs_pdu = &srs->srs_pdu;
         uint8_t N_symb_SRS = 1 << srs_pdu->num_symbols;
         c16_t srs_received_signal[frame_parms->nb_antennas_rx][frame_parms->ofdm_symbol_size * N_symb_SRS];
+        c16_t srs_received_noise[frame_parms->nb_antennas_rx][frame_parms->ofdm_symbol_size * N_symb_SRS];
         c16_t srs_estimated_channel_freq[frame_parms->nb_antennas_rx][1 << srs_pdu->num_ant_ports]
                                         [frame_parms->ofdm_symbol_size * N_symb_SRS] __attribute__((aligned(32)));
         c16_t srs_estimated_channel_time[frame_parms->nb_antennas_rx][1 << srs_pdu->num_ant_ports][frame_parms->ofdm_symbol_size]
@@ -1068,7 +1069,7 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
         stop_meas(&gNB->generate_srs_stats);
         c16_t **rxdataF = gNB->common_vars.rxdataF[srs->beam_nb];
         start_meas(&gNB->get_srs_signal_stats);
-        int srs_est = nr_get_srs_signal(gNB, rxdataF, frame_rx, slot_rx, srs_pdu, gNB->nr_srs_info[i], srs_received_signal);
+        int srs_est = nr_get_srs_signal(gNB, rxdataF, frame_rx, slot_rx, srs_pdu, gNB->nr_srs_info[i], srs_received_signal, srs_received_noise);
         stop_meas(&gNB->get_srs_signal_stats);
 
         if (srs_est >= 0) {
@@ -1080,6 +1081,7 @@ int phy_procedures_gNB_uespec_RX(PHY_VARS_gNB *gNB, int frame_rx, int slot_rx, N
                                     gNB->nr_srs_info[i],
                                     (const c16_t**)gNB->nr_srs_info[i]->srs_generated_signal,
                                     srs_received_signal,
+                                    srs_received_noise,
                                     srs_estimated_channel_freq,
                                     srs_estimated_channel_time,
                                     srs_estimated_channel_time_shifted,
