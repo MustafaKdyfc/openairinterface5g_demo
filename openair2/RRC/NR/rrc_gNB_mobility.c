@@ -549,3 +549,52 @@ void nr_rrc_trigger_n2_ho(gNB_RRC_INST *rrc,
   rrc_gNB_send_NGAP_HANDOVER_REQUIRED(rrc, ue, neighbour_config, hoPrepInfo);
   free_byte_array(hoPrepInfo);
 }
+
+extern const nr_neighbour_cell_t *get_neighbour_cell_by_pci(const neighbour_cell_configuration_t *cell, int pci);
+extern const neighbour_cell_configuration_t *get_neighbour_cell_config(const gNB_RRC_INST *rrc, int cell_id);
+
+void nr_HO_N2_trigger_telnet(gNB_RRC_INST *rrc, uint32_t neighbour_pci, uint32_t rrc_ue_id)
+{
+  rrc_gNB_ue_context_t *ue_context_p = rrc_gNB_get_ue_context(rrc, rrc_ue_id);
+  if (ue_context_p == NULL) {
+    LOG_E(NR_RRC, "N2 HO trigger failed for UE %d: cannot find UE context\n", rrc_ue_id);
+    return;
+  }
+  gNB_RRC_UE_t *UE = &ue_context_p->ue_context;
+
+  struct nr_rrc_du_container_t *du = get_du_for_ue(rrc, rrc_ue_id);
+  if (du == NULL) {
+    LOG_E(NR_RRC, "N2 HO trigger failed for UE %d: Unknown DU\n", rrc_ue_id);
+    return;
+  }
+  uint16_t scell_pci = du->setup_req->cell[0].info.nr_pci;
+
+  // Simulate handover on the same cell (testing purposes)
+  if (neighbour_pci == scell_pci) {
+    LOG_I(NR_RRC, "UE %d: trigger handover on the same cell PCI=%d\n", rrc_ue_id, neighbour_pci);
+    nr_neighbour_cell_t neighbourConfig = {
+        .isIntraFrequencyNeighbour = true,
+        .gNB_ID = du->setup_req->gNB_DU_id,
+        .nrcell_id = du->setup_req->cell[0].info.nr_cellid,
+        .physicalCellId = du->setup_req->cell[0].info.nr_pci,
+        .plmn = du->setup_req->cell[0].info.plmn,
+        .subcarrierSpacing = du->setup_req->cell[0].info.tdd.tbw.scs,
+    };
+    nr_rrc_trigger_n2_ho(rrc, UE, neighbour_pci, &neighbourConfig);
+    return;
+  }
+
+  const f1ap_served_cell_info_t *scell_du = get_cell_information_by_phycellId(scell_pci);
+  DevAssert(scell_du);
+  LOG_I(NR_RRC, "UE %d: triggered N2 HO, source PCI=%d to target PCI=%d\n", rrc_ue_id, scell_pci, neighbour_pci);
+
+  const neighbour_cell_configuration_t *cell = get_neighbour_cell_config(rrc, scell_du->nr_cellid);
+  const nr_neighbour_cell_t *neighbour = get_neighbour_cell_by_pci(cell, neighbour_pci);
+
+  if (neighbour == NULL) {
+    LOG_E(NR_RRC, "N2 HO trigger failed for UE %d: could not find neighbour cell with PCI=%d\n", rrc_ue_id, neighbour_pci);
+    return;
+  }
+
+  nr_rrc_trigger_n2_ho(rrc, UE, scell_du->nr_pci, neighbour);
+}
