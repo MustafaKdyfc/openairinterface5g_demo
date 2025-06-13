@@ -62,32 +62,84 @@
 
 //extern int32_t uplink_counter;
 
-void nr_pusch_codeword_scrambling_uci(uint8_t *in, uint32_t size, uint32_t Nid, uint32_t n_RNTI, uint32_t* out)
+static void nr_pusch_codeword_scrambling_uci(uint8_t *in,
+                                             uint32_t size,
+                                             uint32_t Nid,
+                                             uint32_t n_RNTI,
+                                             const uci_on_pusch_bit_type_t *template,
+                                             uint32_t *out)
 {
   uint32_t *seq = gold_cache((n_RNTI << 15) + Nid, (size + 31) / 32);
-  for (int i=0; i<size; i++) {
-    int idx = i / 32;
-    int b_idx = i % 32;
-    if (in[i]==NR_PUSCH_x)
-      out[idx] ^= 1 << b_idx;
-    else if (in[i]==NR_PUSCH_y){
-      if (b_idx)
-        out[idx] ^= (out[idx] & (1 << (b_idx - 1))) << 1;
-      else{
-        uint32_t temp_out = out[idx - 1];
-        out[idx] ^= temp_out >> 31;
+  uint32_t num_words = (size + 31) / 32;
+
+  // Step 1: Initial general scrambling
+  // First convert unpacked input to bit-packed words
+  uint32_t in_words[num_words];
+  memset(in_words, 0, num_words * sizeof(uint32_t));
+
+  for (uint32_t i = 0; i < size; i++) {
+    uint32_t word_idx = i / 32;
+    uint32_t bit_idx = i % 32;
+    if (in[i] & 1) {
+      in_words[word_idx] |= (1U << bit_idx);
+    }
+  }
+
+  for (uint32_t i = 0; i < num_words; i++) {
+    out[i] = in_words[i] ^ seq[i];
+  }
+
+  for (uint32_t i = 0; i < size; i++) {
+    if (template[i] == BIT_TYPE_ACK) {
+      // Step 2: Overwrite/Correct positions for ACK-only bits when O_ACK > 2
+      uint32_t pos = i;
+      uint32_t idx = pos / 32;
+      uint32_t b_idx = pos % 32;
+
+      // Clear the bit that was set by the initial general scrambling
+      out[idx] &= ~(1U << b_idx);
+
+      uint32_t ack_bit_value = in[pos] & 1;
+      uint32_t scrambling_bit_for_ack = (seq[idx] >> b_idx) & 1;
+      out[idx] |= ((ack_bit_value ^ scrambling_bit_for_ack) << b_idx);
+    } else if (template[i] == BIT_TYPE_ACK_ULSCH) {
+      // Step 3: Overwrite/Correct positions for UCI bits including placeholders X, Y when O_ACK <= 2
+      uint32_t pos = i;
+      uint32_t idx = pos / 32;
+      uint32_t b_idx = pos % 32;
+
+      out[idx] &= ~(1U << b_idx);
+
+      if (in[pos] == NR_PUSCH_y) {
+        if (b_idx > 0) {
+          // Y depends on the final value of the previous bit in the same word.
+          // This previous bit could be an ACK (already corrected) or ULSCH (from initial scramble).
+          out[idx] |= ((out[idx] >> (b_idx - 1)) & 1) << b_idx;
+        } else if (idx > 0) {
+          // Y depends on the last bit of the previous word.
+          out[idx] |= ((out[idx - 1] >> 31) & 1);
+        }
+      } else if (in[pos] == NR_PUSCH_x) {
+        out[idx] |= (1U << b_idx);
+      } else {
+        uint32_t ack_bit_value = in[pos] & 1;
+        uint32_t scrambling_bit_for_ack = (seq[idx] >> b_idx) & 1;
+        out[idx] |= ((ack_bit_value ^ scrambling_bit_for_ack) << b_idx);
       }
     }
-    else
-      out[idx] ^= (((in[i]) & 1) ^ ((seq[idx] >> b_idx) & 1)) << b_idx;
-    //printf("i %d b_idx %d in %d s 0x%08x out 0x%08x\n", i, b_idx, in[i], s, *out);
   }
 }
 
-void nr_pusch_codeword_scrambling(uint8_t *in, uint32_t size, uint32_t Nid, uint32_t n_RNTI, bool uci_on_pusch, uint32_t* out)
+void nr_pusch_codeword_scrambling(uint8_t *in,
+                                  uint32_t size,
+                                  uint32_t Nid,
+                                  uint32_t n_RNTI,
+                                  bool uci_on_pusch,
+                                  const uci_on_pusch_bit_type_t *template,
+                                  uint32_t *out)
 {
   if (uci_on_pusch)
-    nr_pusch_codeword_scrambling_uci(in, size, Nid, n_RNTI, out);
+    nr_pusch_codeword_scrambling_uci(in, size, Nid, n_RNTI, template, out);
   else
     nr_codeword_scrambling(in, size, 0, Nid, n_RNTI, out);
 }
@@ -1201,16 +1253,28 @@ void nr_ue_ulsch_procedures(PHY_VARS_NR_UE *UE,
 
   /////////////////////////ULSCH scrambling/////////////////////////
 
-  uint32_t available_bits = G[pusch_id];
-  // +1 because size can be not modulo 4
-  uint32_t scrambled_output[available_bits / (8 * sizeof(uint32_t)) + 1];
+  uint32_t available_bits;
+  bool is_uci_on_pusch = (pusch_pdu->pusch_uci.harq_ack_bit_length != 0);
+
+  if (is_uci_on_pusch) {
+    // UCI on PUSCH is present, so available bits are the total codeword length
+    available_bits = G_initial_total_pusch_bits;
+  } else {
+    // No UCI on PUSCH, so available bits are the initial G value
+    available_bits = G[pusch_id];
+  }
+
+  // +1 because size can be not modulo 4 for the uint32_t array
+  uint32_t scrambled_output_len_u32 = (available_bits + 31) / 32; // Round up to nearest uint32_t count
+  uint32_t scrambled_output[scrambled_output_len_u32];
   memset(scrambled_output, 0, sizeof(scrambled_output));
 
   nr_pusch_codeword_scrambling(harq_process_ul_ue->f,
                                available_bits,
                                pusch_pdu->data_scrambling_id,
                                rnti,
-                               false,
+                               is_uci_on_pusch,
+                               uci_mapping_template,
                                scrambled_output);
 #if T_TRACER
   if (T_ACTIVE(T_UE_PHY_UL_SCRAMBLED_TX_BITS)) {
