@@ -485,6 +485,45 @@ void nr_generate_pucch1(const PHY_VARS_NR_UE *ue,
   }
 }
 
+// Calculate number of DMRS symbols for PUCCH formats 3 and 4
+static uint8_t nr_pucch_get_dmrs_symbols(uint8_t nrofSymbols, uint8_t add_dmrs)
+{
+  if (nrofSymbols == 4) {
+    return 1;
+  } else if (nrofSymbols > 4 && nrofSymbols <= 9) {
+    return 2;
+  } else if (nrofSymbols > 9) {
+    return (add_dmrs == 0) ? 2 : 4;
+  }
+  return 0;
+}
+
+// Calculate PUCCH format 2/3/4 rate matching output sequence length according to TS 38.212 Table 6.3.1.4-1
+static uint16_t nr_pucch_output_sequence_length(uint8_t format_type,
+                                                uint8_t nrofSymbols,
+                                                uint16_t nrofPRB,
+                                                uint8_t n_SF_PUCCH_s,
+                                                uint8_t is_pi_over_2_bpsk_enabled,
+                                                uint8_t add_dmrs)
+{
+  uint16_t M_bit = 0;
+
+  if (format_type == 2) {
+    M_bit = 16 * nrofSymbols * nrofPRB;
+  } else if (format_type == 3) {
+    uint16_t E_init = (is_pi_over_2_bpsk_enabled == 0) ? 24 : 12;
+    uint8_t num_dmrs_symbols = nr_pucch_get_dmrs_symbols(nrofSymbols, add_dmrs);
+    M_bit = E_init * (nrofSymbols - num_dmrs_symbols) * nrofPRB / n_SF_PUCCH_s;
+  } else if (format_type == 4) {
+    nrofPRB = 1;
+    uint16_t E_init = (is_pi_over_2_bpsk_enabled == 0) ? 24 : 12;
+    uint8_t num_dmrs_symbols = nr_pucch_get_dmrs_symbols(nrofSymbols, add_dmrs);
+    M_bit = E_init * (nrofSymbols - num_dmrs_symbols) * nrofPRB / n_SF_PUCCH_s;
+  }
+
+  return M_bit;
+}
+
 static inline void nr_pucch2_3_4_scrambling(uint16_t M_bit, uint16_t rnti, uint16_t n_id, uint64_t *B64, uint8_t *btilde)
 {
   // c_init=nRNTI*2^15+n_id according to TS 38.211 Subclause 6.3.2.6.1
@@ -726,7 +765,7 @@ void nr_generate_pucch2(const PHY_VARS_NR_UE *ue,
   // b is the block of bits transmitted on the physical channel after payload coding
   uint64_t b[16] = {0}; // limit to 1024-bit encoded length
   // M_bit is the number of bits of block b (payload after encoding)
-  uint16_t M_bit = 16 * pucch_pdu->nr_of_symbols * pucch_pdu->prb_size;
+  uint16_t M_bit = nr_pucch_output_sequence_length(pucch_pdu->format_type, pucch_pdu->nr_of_symbols, pucch_pdu->prb_size, 0, 0, 0);
   nr_uci_encoding(pucch_pdu->payload, pucch_pdu->n_bit, pucch_pdu->prb_size, false, M_bit, 0, &b[0]);
   /*
    * Implementing TS 38.211
@@ -938,26 +977,12 @@ void nr_generate_pucch3_4(const PHY_VARS_NR_UE *ue,
   uint16_t startingPRB = pucch_pdu->prb_start + pucch_pdu->bwp_start;
   uint8_t add_dmrs = pucch_pdu->add_dmrs_flag;
 
-  uint16_t E_init = (is_pi_over_2_bpsk_enabled == 0) ? 24 : 12;
-
-  if (pucch_pdu->format_type == 3) {
-    if (nrofSymbols == 4) {
-      M_bit = (intraSlotFrequencyHopping == 0) ? (E_init * (nrofSymbols - 1) * nrofPRB) : (E_init * (nrofSymbols - 1) * nrofPRB);
-    } else if (nrofSymbols > 4) {
-      M_bit = E_init * (nrofSymbols - 2) * nrofPRB;
-    } else if (nrofSymbols > 9) {
-      M_bit = (add_dmrs == 0) ? (E_init * (nrofSymbols - 2) * nrofPRB) : (E_init * (nrofSymbols - 4) * nrofPRB);
-    }
-  } else if (pucch_pdu->format_type == 4) {
-    if (nrofSymbols == 4) {
-      M_bit = (intraSlotFrequencyHopping == 0) ? (E_init * (nrofSymbols - 1) / n_SF_PUCCH_s)
-                                               : (E_init * (nrofSymbols - 1) / n_SF_PUCCH_s);
-    } else if (nrofSymbols > 4) {
-      M_bit = E_init * (nrofSymbols - 2) / n_SF_PUCCH_s;
-    } else if (nrofSymbols > 9) {
-      M_bit = (add_dmrs == 0) ? (E_init * (nrofSymbols - 2) / n_SF_PUCCH_s) : (E_init * (nrofSymbols - 4) / n_SF_PUCCH_s);
-    }
-  }
+  M_bit = nr_pucch_output_sequence_length(pucch_pdu->format_type,
+                                          nrofSymbols,
+                                          nrofPRB,
+                                          n_SF_PUCCH_s,
+                                          is_pi_over_2_bpsk_enabled,
+                                          add_dmrs);
 
   nr_uci_encoding(pucch_pdu->payload, pucch_pdu->n_bit, nrofPRB, false, M_bit, 0, b);
   /*
