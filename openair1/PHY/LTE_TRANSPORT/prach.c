@@ -368,6 +368,11 @@ void rx_prach0(PHY_VARS_eNB *eNB,
   uint8_t update_TA  = 4;
   uint8_t update_TA2 = 1;
 
+  if (!eNB) {
+    LOG_E(PHY, "inconsistent case\n");
+    return;
+  }
+
   switch (eNB->frame_parms.N_RB_DL) {
     case 6:
       update_TA = 16;
