@@ -251,6 +251,14 @@ def ExecuteActionWithParam(action, ctx):
 		workdir = CLUSTER.eNBSourceCodePath
 		success = cls_oaicitest.Deploy_Physim(ctx, HTML, node, workdir, script, options)
 
+	elif action == 'Build_Deploy_Docker_PhySim':
+		node = test.findtext('node') or None
+		ctest_opt = test.findtext('ctest-opt') or ''
+		script = "scripts/docker-build-and-deploy-physims.sh"
+		options = f"{CONTAINERS.eNBSourceCodePath} {ctest_opt}"
+		workdir = CONTAINERS.eNBSourceCodePath
+		success = cls_oaicitest.Deploy_Physim(ctx, HTML, node, workdir, script, options)
+
 	elif action == 'DeployCoreNetwork' or action == 'UndeployCoreNetwork':
 		cn_id = test.findtext('cn_id')
 		core_op = getattr(cls_oaicitest.OaiCiTest, action)
