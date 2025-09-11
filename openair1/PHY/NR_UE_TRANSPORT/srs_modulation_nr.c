@@ -85,80 +85,62 @@ uint16_t sequence_number_hopping(int slot_number,
   return v;
 }
 
-uint16_t compute_F_b(frame_t frame_number,
-                     slot_t slot_number,
-                     uint16_t slots_per_frame,
-                     uint8_t N_symb_SRS,
-                     uint8_t B_SRS,
-                     uint8_t C_SRS,
-                     uint8_t b_hop,
-                     uint8_t R,
-                     uint16_t T_offset,
-                     uint16_t T_SRS,
-                     resourceType_t resource_type,
-                     uint8_t l_line,
-                     uint8_t b) {
-
+static int compute_F_b(frame_t frame_number,
+                       slot_t slot_number,
+                       int slots_per_frame,
+                       nr_srs_info_t *nr_srs_info,
+                       uint8_t l_line,
+                       uint8_t b)
+{
   // Compute the number of SRS transmissions
   uint16_t n_SRS = 0;
-  if (resource_type == aperiodic) {
-    n_SRS = l_line / R;
+  if (nr_srs_info->resource_type == aperiodic) {
+    n_SRS = l_line / nr_srs_info->R;
   } else {
-    n_SRS = ((slots_per_frame*frame_number + slot_number - T_offset)/T_SRS)*(N_symb_SRS/R)+(l_line / R);
+    int t = (slots_per_frame * frame_number + slot_number - nr_srs_info->T_offset) / nr_srs_info->T_SRS;
+    n_SRS = t * (nr_srs_info->N_symb_SRS / nr_srs_info->R) + (l_line / nr_srs_info->R);
   }
 
   uint16_t product_N_b = 1;
-  for (unsigned int b_prime = b_hop; b_prime < B_SRS; b_prime++) {
-    if (b_prime != b_hop) {
-      product_N_b *= get_N_b_srs(C_SRS, b_prime);
+  for (unsigned int b_prime = nr_srs_info->b_hop; b_prime < nr_srs_info->B_SRS; b_prime++) {
+    if (b_prime != nr_srs_info->b_hop) {
+      product_N_b *= get_N_b_srs(nr_srs_info->C_SRS, b_prime);
     }
   }
 
-  uint16_t F_b = 0;
-  uint8_t N_b = get_N_b_srs(C_SRS, b);
+  int F_b = 0;
+  uint8_t N_b = get_N_b_srs(nr_srs_info->C_SRS, b);
   if (N_b & 1) { // Nb odd
-    F_b = (N_b/2)*(n_SRS/product_N_b);
+    F_b = (N_b / 2) * (n_SRS / product_N_b);
   } else { // Nb even
     uint16_t product_N_b_B_SRS = product_N_b;
-    product_N_b_B_SRS *= get_N_b_srs(C_SRS, B_SRS); /* product for b_hop to b */
-    F_b = (N_b/2)*((n_SRS%product_N_b_B_SRS)/product_N_b) + ((n_SRS%product_N_b_B_SRS)/2*product_N_b);
+    product_N_b_B_SRS *= get_N_b_srs(nr_srs_info->C_SRS, nr_srs_info->B_SRS); /* product for b_hop to b */
+    F_b = (N_b / 2) * ((n_SRS % product_N_b_B_SRS) / product_N_b) + ((n_SRS % product_N_b_B_SRS) / 2 * product_N_b);
   }
-
   return F_b;
 }
 
-uint16_t compute_n_b(frame_t frame_number,
-                     slot_t slot_number,
-                     uint16_t slots_per_frame,
-                     uint8_t N_symb_SRS,
-                     uint8_t B_SRS,
-                     uint8_t C_SRS,
-                     uint8_t b_hop,
-                     uint8_t n_RRC,
-                     uint8_t R,
-                     uint16_t T_offset,
-                     uint16_t T_SRS,
-                     resourceType_t resource_type,
-                     uint8_t l_line,
-                     uint8_t b) {
-
-  uint8_t N_b = get_N_b_srs(C_SRS, b);
-  uint16_t m_SRS_b = get_m_srs(C_SRS, B_SRS);
-
-  uint16_t n_b = 0;
-  if (b_hop >= B_SRS) {
-    n_b = (4 * n_RRC/m_SRS_b)%N_b;
+static int compute_n_b(frame_t frame_number,
+                       slot_t slot_number,
+                       uint16_t slots_per_frame,
+                       nr_srs_info_t *nr_srs_info,
+                       uint8_t l_line,
+                       uint8_t b,
+                       int m_SRS_b)
+{
+  uint8_t N_b = get_N_b_srs(nr_srs_info->C_SRS, b);
+  int n_b = 0;
+  if (nr_srs_info->b_hop >= nr_srs_info->B_SRS) {
+    n_b = (4 * nr_srs_info->n_RRC / m_SRS_b) % N_b;
   } else {
-    if (b <= b_hop) {
-      n_b = (4 * n_RRC/m_SRS_b)%N_b;
+    if (b <= nr_srs_info->b_hop) {
+      n_b = (4 * nr_srs_info->n_RRC / m_SRS_b) % N_b;
     } else {
       // Compute the hopping offset Fb
-      uint16_t F_b = compute_F_b(frame_number, slot_number, slots_per_frame, N_symb_SRS, B_SRS, C_SRS, b_hop, R,
-                                 T_offset, T_SRS, resource_type, l_line, b);
-      n_b = (F_b + (4 * n_RRC/m_SRS_b))%N_b;
+      int F_b = compute_F_b(frame_number, slot_number, slots_per_frame, nr_srs_info, l_line, b);
+      n_b = (F_b + (4 * nr_srs_info->n_RRC / m_SRS_b)) % N_b;
     }
   }
-
   return n_b;
 }
 
@@ -191,7 +173,7 @@ int generate_srs_nr(NR_DL_FRAME_PARMS *frame_parms,
   int N_ap = nr_srs_info->n_srs_ports > frame_parms->nb_antennas_tx ? frame_parms->nb_antennas_tx : nr_srs_info->n_srs_ports;
   uint8_t l0 = frame_parms->symbols_per_slot - 1 - nr_srs_info->l_offset;  // Starting symbol position in the time domain
   uint8_t n_SRS_cs_max = srs_max_number_cs[nr_srs_info->comb_size];
-  uint16_t m_SRS_b = get_m_srs(nr_srs_info->C_SRS, nr_srs_info->B_SRS);   // Number of resource blocks
+  int m_SRS_b = get_m_srs(nr_srs_info->C_SRS, nr_srs_info->B_SRS);   // Number of resource blocks
   uint16_t M_sc_b_SRS = m_SRS_b * NR_NB_SC_PER_RB/K_TC;       // Length of the SRS sequence
 
 #ifdef SRS_DEBUG
@@ -253,7 +235,7 @@ int generate_srs_nr(NR_DL_FRAME_PARMS *frame_parms,
   }
   uint64_t subcarrier_offset = frame_parms->first_carrier_offset + bwp_start * NR_NB_SC_PER_RB;
   double sqrt_N_ap = sqrt(N_ap);
-  uint16_t n_b[nr_srs_info->B_SRS + 1];
+  int n_b[nr_srs_info->B_SRS + 1];
 
   // Find index of table which is for this SRS length
   uint16_t M_sc_b_SRS_index = 0;
@@ -311,21 +293,7 @@ int generate_srs_nr(NR_DL_FRAME_PARMS *frame_parms,
       // Compute the frequency position index n_b
       uint16_t sum_n_b = 0;
       for (int b = 0; b <= nr_srs_info->B_SRS; b++) {
-        n_b[b] = compute_n_b(frame_number,
-                             slot_number,
-                             frame_parms->slots_per_frame,
-                             nr_srs_info->N_symb_SRS,
-                             nr_srs_info->B_SRS,
-                             nr_srs_info->C_SRS,
-                             nr_srs_info->b_hop,
-                             nr_srs_info->n_RRC,
-                             nr_srs_info->R,
-                             nr_srs_info->T_offset,
-                             nr_srs_info->T_SRS,
-                             nr_srs_info->resource_type,
-                             l_line,
-                             b);
-
+        n_b[b] = compute_n_b(frame_number, slot_number, frame_parms->slots_per_frame, nr_srs_info, l_line, b, m_SRS_b);
         sum_n_b += n_b[b];
 
 #ifdef SRS_DEBUG
