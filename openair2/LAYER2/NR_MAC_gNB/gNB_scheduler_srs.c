@@ -462,6 +462,12 @@ static void nr_configure_srs(gNB_MAC_INST *nrmac,
   srs_pdu->srs_parameters_v4.iq_representation = 1;
   srs_pdu->srs_parameters_v4.prg_size = 1;
   srs_pdu->srs_parameters_v4.num_total_ue_antennas = 1 << srs_pdu->num_ant_ports;
+  /* For srs usage: codebook, this is a bitmask of the antenna ports that should be used for data.
+  * num_ant_ports num_total_ue_antennas sampled_ue_antennas
+  *             0                     1                   1
+  *             1                     2                   3
+  *             2                     4                  15 */
+  srs_pdu->srs_parameters_v4.sampled_ue_antennas = (2 << srs_pdu->num_ant_ports) - 1;
   if (srs_resource_set->usage == NR_SRS_ResourceSet__usage_beamManagement) {
     srs_pdu->beamforming.trp_scheme = 0;
     srs_pdu->beamforming.num_prgs = m_SRS[srs_pdu->config_index];
