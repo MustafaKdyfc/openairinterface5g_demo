@@ -38,9 +38,8 @@
 #include "common/utils/LOG/log.h"
 #include "PHY/sse_intrin.h"
 
-//#define k1 1000
-#define k1 ((long long int) 1000)
-#define k2 ((long long int) (1024-k1))
+#define K1 ((long long int) 512)
+#define K2 ((long long int) (1024-K1))
 
 //#define DEBUG_MEAS_RRC
 //#define DEBUG_MEAS_UE
@@ -136,11 +135,11 @@ void nr_ue_measurements(PHY_VARS_NR_UE *ue,
   if (ue->init_averaging == 0) {
 
     for (gNB_id = 0; gNB_id < ue->n_connected_gNB; gNB_id++)
-      ue->measurements.rx_power_avg[gNB_id] = (int)(((k1*((long long int)(ue->measurements.rx_power_avg[gNB_id]))) + (k2*((long long int)(ue->measurements.rx_power_tot[gNB_id])))) >> 10);
+      ue->measurements.rx_power_avg[gNB_id] = (int)((K1 * ue->measurements.rx_power_avg[gNB_id] + K2 * ue->measurements.rx_power_tot[gNB_id]) >> 10);
 
-    ue->measurements.n0_power_avg = (int)(((k1*((long long int) (ue->measurements.n0_power_avg))) + (k2*((long long int) (ue->measurements.n0_power_tot))))>>10);
+    ue->measurements.n0_power_avg = (int)((K1 * ue->measurements.n0_power_avg + K2 * ue->measurements.n0_power_tot) >> 10);
 
-    LOG_D(PHY, "Noise Power Computation: k1 %lld k2 %lld n0 avg %u n0 tot %u\n", k1, k2, ue->measurements.n0_power_avg, ue->measurements.n0_power_tot);
+    LOG_D(PHY, "Noise Power Computation: K1 %lld K2 %lld n0 avg %u n0 tot %u\n", K1, K2, ue->measurements.n0_power_avg, ue->measurements.n0_power_tot);
 
   } else {
 

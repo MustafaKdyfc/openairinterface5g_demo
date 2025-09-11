@@ -78,7 +78,7 @@ available in the the file `nrMAC-stats.log` in the same directory in which
 Example:
 
 ```
-UE RNTI 2460 CU-UE-ID 2 in-sync PH 28 dB PCMAX 24 dBm, average RSRP -74 (8 meas)
+UE RNTI 2460 CU-UE-ID 2 in-sync PH 28 dB PCMAX 24 dBm, average RSRP -74 (8 meas), average SINR 40.0 (32 meas)
 UE 2460: CQI 15, RI 2, PMI (14,1)
 UE 2460: UL-RI 2 TPMI 0
 UE 2460: dlsch_rounds 32917/5113/1504/560, dlsch_errors 211, pucch0_DTX 1385, BLER 0.19557 MCS (1) 23 CCE fail 3
@@ -103,6 +103,8 @@ In the first line,
 * `RSRP` (`-74`): measured power of the DL reference signals at the UE. >-80dBm
   you should have full DL throughput. <-95 dBm, you are very limited in terms
   of connectivity.
+* `SINR` (`40.0`): measured signal to interference and noise ratio of the SSB
+  received at the UE. Maximum value that can be reported by the UE is 40.0 dB.
 
 The second and third line reflect channel state information (CSI) as
 reported by the UE, and only appear if CSI-RS/SRS are enabled and _received_

@@ -521,8 +521,7 @@ typedef struct RSRP_report {
   uint8_t nr_reports;
   uint8_t resource_id[MAX_NR_OF_REPORTED_RS];
   int RSRP[MAX_NR_OF_REPORTED_RS];
-  // SINR index according to tables 10.1.16.1-1, 10.1.16.1-2
-  int SINR_index[MAX_NR_OF_REPORTED_RS];
+  int SINRx10[MAX_NR_OF_REPORTED_RS];
 } RSRP_report_t;
 
 struct CSI_Report {
@@ -694,6 +693,8 @@ typedef struct NR_mac_stats {
   uint32_t pucch0_DTX;
   int cumul_rsrp;
   uint8_t num_rsrp_meas;
+  int cumul_sinrx10;
+  uint8_t num_sinr_meas;
   char srs_stats[50]; // Statistics may differ depending on SRS usage
   int pusch_snrx10;
   int deltaMCS;
