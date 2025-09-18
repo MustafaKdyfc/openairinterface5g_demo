@@ -192,6 +192,20 @@ typedef enum {
 
 typedef enum { RB_NOT_PRESENT, RB_ESTABLISHED, RB_SUSPENDED } NR_RB_status_t;
 
+typedef struct l3_measurements_s {
+  float ssb_filter_coeff_rsrp;
+  float csi_RS_filter_coeff_rsrp;
+  meas_t serving_cell;
+  long trigger_to_measid;
+  long trigger_quantity;
+  long rs_type;
+  int reports_sent;
+  int max_reports;
+  long report_interval_ms;
+  NR_timer_t TA2;
+  NR_timer_t periodic_report_timer;
+} l3_measurements_t;
+
 typedef struct rrcPerNB {
   NR_MeasObjectToAddMod_t *MeasObj[MAX_MEAS_OBJ];
   NR_ReportConfigToAddMod_t *ReportConfig[MAX_MEAS_CONFIG];
@@ -201,6 +215,7 @@ typedef struct rrcPerNB {
   NR_MeasGapConfig_t *measGapConfig;
   NR_UE_RRC_SI_INFO SInfo;
   NR_RSRP_Range_t s_measure;
+  l3_measurements_t l3_measurements;
 } rrcPerNB_t;
 
 typedef struct NR_UE_RRC_INST_s {
