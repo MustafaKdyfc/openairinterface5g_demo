@@ -1466,11 +1466,11 @@ void rrc_gNB_send_NGAP_HANDOVER_NOTIFY(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE)
   ho_notify->gNB_ue_ngap_id = UE->rrc_ue_id;
   ho_notify->amf_ue_ngap_id = UE->amf_ue_ngap_id;
   ho_notify->user_info.nrCellIdentity = rrc->nr_cellid;
-  ho_notify->user_info.target_ng_ran.tac = *du->setup_req->cell->info.tac;
-  ho_notify->user_info.target_ng_ran.targetgNBId = rrc->node_id;
-  ho_notify->user_info.target_ng_ran.plmn_identity.mcc = du->setup_req->cell->info.plmn.mcc;
-  ho_notify->user_info.target_ng_ran.plmn_identity.mnc = du->setup_req->cell->info.plmn.mnc;
-  ho_notify->user_info.target_ng_ran.plmn_identity.mnc_digit_length = du->setup_req->cell->info.plmn.mnc_digit_length;
+
+  target_ran_node_id_t *target_ng_ran = &ho_notify->user_info.target_ng_ran;
+  target_ng_ran->tac = *du->setup_req->cell->info.tac;
+  target_ng_ran->targetgNBId = rrc->node_id;
+  target_ng_ran->plmn_identity = du->setup_req->cell->info.plmn;
 
   itti_send_msg_to_task(TASK_NGAP, rrc->module_id, msg_p);
 }
@@ -1626,10 +1626,7 @@ void rrc_gNB_send_NGAP_HANDOVER_REQUIRED(gNB_RRC_INST *rrc,
 {
   LOG_I(NR_RRC, "Handover Preparation: send Handover Required (target gNB ID=%d, PCI=%d)\n", neighbour->gNB_ID, neighbour->physicalCellId);
 
-  const plmn_id_t plmn = {.mcc = neighbour->plmn.mnc,
-                          .mnc = neighbour->plmn.mnc,
-                          .mnc_digit_length = neighbour->plmn.mnc_digit_length};
-
+  const plmn_id_t plmn = neighbour->plmn;
   const target_ran_node_id_t target = {
       .plmn_identity = plmn,
       .tac = neighbour->tac,
