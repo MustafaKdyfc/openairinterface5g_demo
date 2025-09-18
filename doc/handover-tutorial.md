@@ -13,6 +13,23 @@ same.
 
 ![F1 Handover setup](./RRC/ho.png)
 
+# What is a gNB neighbor?
+
+Network continuity is a key aspect of 5G. In the 5G architecture, gNB neighbors
+play a central role in maintaining service continuity through mechanisms such
+as handover and load balancing. By definition, a gNB neighbor is another gNB
+that can be measured and linked by the UE. If the current serving gNB is no
+longer optimal, the UE may connect to a neighbor gNB.
+
+To support this behavior, the network configuration specifies additional frequencies
+and cells that the UE should measure. The UE reports these measurements to the
+network, which then decides whether or not to initiate a handover.
+
+Neighbor types include:
+- **Intra-gNB neighbors** - cells belonging to the same gNB
+- **Inter-gNB neighbors** - cells belonging to different gNBs
+- **Inter-RAT neighbors** - cells belonging to another RAT (e.g., LTE)
+
 # Steps to run F1 handover with OAI UE
 
 Measurement reporting and processing of RRC Reconfiguration for Mobility are
