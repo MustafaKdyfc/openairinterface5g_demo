@@ -1953,10 +1953,12 @@ static bool eq_drb_to_mod(const DRB_nGRAN_to_mod_t *a, const DRB_nGRAN_to_mod_t 
     if (!eq_up_tl_info(&a->DlUpParamList[i].tl_info, &b->DlUpParamList[i].tl_info))
       return false;
   }
+  _E1_EQ_CHECK_OPTIONAL_PTR(a, b, pdcp_config);
   if (a->pdcp_config && b->pdcp_config) {
     if (!eq_pdcp_config(a->pdcp_config, b->pdcp_config))
       return false;
   }
+  _E1_EQ_CHECK_OPTIONAL_PTR(a, b, sdap_config);
   if (a->sdap_config && b->sdap_config) {
     if (!eq_sdap_config(a->sdap_config, b->sdap_config))
       return false;
@@ -1973,7 +1975,8 @@ static bool eq_drb_to_mod(const DRB_nGRAN_to_mod_t *a, const DRB_nGRAN_to_mod_t 
 static bool eq_pdu_session_to_mod_item(const pdu_session_to_mod_t *a, const pdu_session_to_mod_t *b)
 {
   _E1_EQ_CHECK_LONG(a->sessionId, b->sessionId);
-  if (a->UP_TL_information && a->UP_TL_information) {
+  _E1_EQ_CHECK_OPTIONAL_PTR(a, b, UP_TL_information);
+  if (a->UP_TL_information && b->UP_TL_information) {
     if (!eq_up_tl_info(a->UP_TL_information, b->UP_TL_information))
       return false;
   }
@@ -1987,8 +1990,10 @@ static bool eq_pdu_session_to_mod_item(const pdu_session_to_mod_t *a, const pdu_
     if (!eq_drb_to_mod(&a->DRBnGRanModList[i], &b->DRBnGRanModList[i]))
       return false;
   }
+  _E1_EQ_CHECK_OPTIONAL_PTR(a, b, securityIndication);
   if (a->securityIndication && b->securityIndication) {
-    eq_security_ind(a->securityIndication, b->securityIndication);
+    if (!eq_security_ind(a->securityIndication, b->securityIndication))
+      return false;
   }
   return true;
 }
