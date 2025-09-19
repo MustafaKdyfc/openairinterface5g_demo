@@ -376,20 +376,6 @@ static int ngap_gNB_handover_request_acknowledge(instance_t instance, ngap_hando
   DevAssert(msg != NULL);
   DevAssert(ngap != NULL);
 
-  // First, create and store NGAP UE context
-  ngap_gNB_ue_context_t ue_context_p = {
-      .amf_ref = ngap_gNB_get_AMF_from_instance(ngap),
-      .gNB_ue_ngap_id = msg->gNB_ue_ngap_id,
-      .amf_ue_ngap_id = msg->amf_ue_ngap_id,
-      .gNB_instance = ngap,
-      .ue_state = NGAP_UE_CONNECTED,
-  };
-  if (ue_context_p.amf_ref == NULL) {
-    NGAP_ERROR("Failed to fetch AMF for current NGAP instance\n");
-    return -1;
-  }
-  ngap_store_ue_context(&ue_context_p);
-
   NGAP_NGAP_PDU_t *pdu = encode_ng_handover_request_ack(msg);
   if (!pdu) {
     NGAP_ERROR("Failed to encode NG Handover Request Acknowledge\n");
@@ -404,6 +390,21 @@ static int ngap_gNB_handover_request_acknowledge(instance_t instance, ngap_hando
     ASN_STRUCT_FREE(asn_DEF_NGAP_NGAP_PDU, pdu);
     return -1;
   }
+
+  // Create and store NGAP UE context
+  ngap_gNB_ue_context_t ue_context_p = {
+    .amf_ref = ngap_gNB_get_AMF_from_instance(ngap),
+    .gNB_ue_ngap_id = msg->gNB_ue_ngap_id,
+    .amf_ue_ngap_id = msg->amf_ue_ngap_id,
+    .gNB_instance = ngap,
+    .ue_state = NGAP_UE_CONNECTED,
+  };
+  if (!ue_context_p.amf_ref) {
+    NGAP_ERROR("Failed to fetch AMF for current NGAP instance\n");
+    ASN_STRUCT_FREE(asn_DEF_NGAP_NGAP_PDU, pdu);
+    return -1;
+  }
+  ngap_store_ue_context(&ue_context_p);
 
   /* UE associated signalling -> use the allocated stream */
   ngap_gNB_itti_send_sctp_data_req(ngap->instance, ue_context_p.amf_ref->assoc_id, ba.buf, ba.len, ue_context_p.tx_stream);
