@@ -591,7 +591,6 @@ static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
   int bitlen = csi_report->CSI_report_bitlen.cri_ssbri_bitlen;
   uint8_t curr_payload = pickandreverse_bits(payload, bitlen, *cumul_bits);
   rsrp_report->resource_id[0] = *(index_list[bitlen > 0 ? ((curr_payload) & ~(~1U << (bitlen - 1))) : bitlen]);
-  LOG_D(NR_MAC, "SSB/CSI-RS index = %d\n", rsrp_report->resource_id[0]);
   *cumul_bits += bitlen;
 
   curr_payload = pickandreverse_bits(payload, 7, *cumul_bits);
@@ -599,6 +598,7 @@ static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
   *cumul_bits += 7;
   csi_report->nb_of_csi_ssb_report++;
   bool valid = get_measured_rsrp(rsrp, &rsrp_report->RSRP[0]);
+  LOG_D(NR_MAC, "SSB/CSI-RS index %d RSRP %d\n", rsrp_report->resource_id[0], rsrp_report->RSRP[0]);
   if (!valid) {
     LOG_E(NR_MAC, "UE %04x: reported RSRP index %d invalid\n", UE->rnti, rsrp);
     return;
@@ -612,6 +612,7 @@ static void evaluate_rsrp_report(gNB_MAC_INST *nrmac,
     curr_payload = pickandreverse_bits(payload, 4, *cumul_bits);
     csi_report->nb_of_csi_ssb_report++;
     rsrp_report->RSRP[i] = get_diff_rsrp(curr_payload & 0x0f, rsrp_report->RSRP[0]);
+    LOG_D(NR_MAC, "SSB/CSI-RS index %d RSRP %d\n", rsrp_report->resource_id[i], rsrp_report->RSRP[i]);
     *cumul_bits += 4;
   }
 
