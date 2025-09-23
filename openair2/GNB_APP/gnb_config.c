@@ -1431,6 +1431,7 @@ void RCconfig_nr_macrlc(configmodule_interface_t *cfg)
   LOG_I(GNB_APP, "SIB1 TDA %d\n", config.sib1_tda);
   config.do_CSIRS = *GNBParamList.paramarray[0][GNB_DO_CSIRS_IDX].iptr;
   config.do_SRS = *GNBParamList.paramarray[0][GNB_DO_SRS_IDX].iptr;
+  config.max_num_rsrp = *GNBParamList.paramarray[0][GNB_LIMIT_RSRP_REPORT_IDX].iptr;
   config.do_SINR = *GNBParamList.paramarray[0][GNB_DO_SINR_IDX].iptr;
   config.force_256qam_off = *GNBParamList.paramarray[0][GNB_FORCE256QAMOFF_IDX].iptr;
   config.force_UL256qam_off = *GNBParamList.paramarray[0][GNB_FORCEUL256QAMOFF_IDX].iptr;

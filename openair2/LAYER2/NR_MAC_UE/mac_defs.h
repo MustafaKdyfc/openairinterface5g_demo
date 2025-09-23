@@ -407,8 +407,8 @@ typedef struct {
   NR_PUCCH_Resource_t *pucch_resource;
   uint32_t ack_payload;
   uint8_t sr_payload;
-  uint32_t csi_part1_payload;
-  uint32_t csi_part2_payload;
+  uint64_t csi_part1_payload;
+  uint64_t csi_part2_payload;
   int n_sr;
   int n_csi;
   int n_harq;
@@ -418,9 +418,8 @@ typedef struct {
 } PUCCH_sched_t;
 
 typedef struct {
-  uint32_t ssb_index;
   /// SSB RSRP in dBm
-  short ssb_rsrp_dBm;
+  int ssb_rsrp_dBm;
   float_t ssb_sinr_dB;
 } NR_SSB_meas_t;
 
@@ -473,8 +472,8 @@ typedef struct {
 } NR_BWP_PDCCH_t;
 
 typedef struct csi_payload {
-  uint32_t part1_payload;
-  uint32_t part2_payload;
+  uint64_t part1_payload;
+  uint64_t part2_payload;
   int p1_bits;
   int p2_bits;
 } csi_payload_t;
@@ -625,7 +624,7 @@ typedef struct NR_UE_MAC_INST_s {
   uint8_t ssb_subcarrier_offset;
   int ssb_start_subcarrier;
 
-  NR_SSB_meas_t ssb_measurements;
+  NR_SSB_meas_t ssb_measurements[MAX_NB_SSB];
 
   dci_pdu_rel15_t def_dci_pdu_rel15[NR_MAX_SLOTS_PER_FRAME][8];
 

@@ -260,7 +260,7 @@ void update_mac_ul_timers(NR_UE_MAC_INST_t *mac)
   if (phr_info->is_configured) {
     bool prohibit_expired = nr_timer_tick(&phr_info->prohibitPHR_Timer);
     if (prohibit_expired) {
-      int16_t pathloss = compute_nr_SSB_PL(mac, mac->ssb_measurements.ssb_rsrp_dBm);
+      int16_t pathloss = compute_nr_SSB_PL(mac);
       if (abs(pathloss - phr_info->PathlossLastValue) > phr_info->PathlossChange_db) {
         phr_info->phr_reporting |= (1 << phr_cause_prohibit_timer);
       }
@@ -2905,7 +2905,7 @@ static void nr_ue_fill_phr(NR_UE_MAC_INST_t *mac,
         headroom,
         tx_power);
 
-  phr_info->PathlossLastValue = compute_nr_SSB_PL(mac, mac->ssb_measurements.ssb_rsrp_dBm);
+  phr_info->PathlossLastValue = compute_nr_SSB_PL(mac);
   // Restart both timers according to 38.321
   nr_timer_start(&phr_info->periodicPHR_Timer);
   nr_timer_start(&phr_info->prohibitPHR_Timer);

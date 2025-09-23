@@ -42,7 +42,7 @@
 int16_t get_prach_tx_power(NR_UE_MAC_INST_t *mac)
 {
   RA_config_t *ra = &mac->ra;
-  int16_t pathloss = compute_nr_SSB_PL(mac, mac->ssb_measurements.ssb_rsrp_dBm);
+  int16_t pathloss = compute_nr_SSB_PL(mac);
   int16_t ra_preamble_rx_power = (int16_t)(ra->prach_resources.ra_preamble_rx_target_power + pathloss);
   return min(ra->prach_resources.Pc_max, ra_preamble_rx_power);
 }
@@ -177,7 +177,7 @@ static void select_preamble_group(NR_UE_MAC_INST_t *mac)
       // – preambleReceivedTargetPower – msg3-DeltaPreamble – messagePowerOffsetGroupB
       int groupB_pow_offset = get_messagePowerOffsetGroupB(groupB->messagePowerOffsetGroupB);
       int PLThreshold = ra->prach_resources.Pc_max - ra->preambleRxTargetPower - ra->msg3_deltaPreamble - groupB_pow_offset;
-      int pathloss = compute_nr_SSB_PL(mac, mac->ssb_measurements.ssb_rsrp_dBm);
+      int pathloss = compute_nr_SSB_PL(mac);
       // TODO if the Random Access procedure was initiated for the CCCH logical channel and the CCCH SDU size
       // plus MAC subheader is greater than ra-Msg3SizeGroupA
       if (ra->Msg3_size > get_Msg3SizeGroupA(groupB->ra_Msg3SizeGroupA) && pathloss < PLThreshold)
@@ -971,7 +971,7 @@ bool init_RA(NR_UE_MAC_INST_t *mac, int frame)
                       "msgA_RSRP_Threshold_r16 is mandatory present if both 2-step and 4-step random access types are configured\n");
           // For thresholds the RSRP value is (IE value – 156) dBm except for the IE 127 in which case the actual value is infinity
           int rsrp_msga_thr = *twostep_conf->msgA_RSRP_Threshold_r16 - 156;
-          if (*twostep_conf->msgA_RSRP_Threshold_r16 != 127 && mac->ssb_measurements.ssb_rsrp_dBm > rsrp_msga_thr)
+          if (*twostep_conf->msgA_RSRP_Threshold_r16 != 127 && mac->ssb_measurements[mac->mib_ssb].ssb_rsrp_dBm > rsrp_msga_thr)
             twostep = true;
         } else {
           // if the BWP selected for Random Access procedure is only configured with 2-step RA type Random Access
