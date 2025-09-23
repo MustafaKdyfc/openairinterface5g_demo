@@ -638,11 +638,14 @@ NR_MeasConfig_t *nr_rrc_get_measconfig(const gNB_RRC_INST *rrc, uint64_t nr_cell
   nr_rrc_du_container_t *du = get_du_by_cell_id((gNB_RRC_INST *)rrc, nr_cellid);
   DevAssert(du != NULL);
   f1ap_served_cell_info_t *cell_info = &du->setup_req->cell[0].info;
-  NR_ReportConfigToAddMod_t *rc_PER = NULL;
-  NR_ReportConfigToAddMod_t *rc_A2 = NULL;
-  seq_arr_t *rc_A3_seq = NULL;
-  seq_arr_t *neigh_seq = NULL;
+
   if (du->mtc != NULL) {
+    NR_ReportConfigToAddMod_t *rc_PER = NULL;
+    NR_ReportConfigToAddMod_t *rc_A2 = NULL;
+    seq_arr_t rc_A3_seq = {0};
+    seq_arr_t neigh_seq = {0};
+    seq_arr_init(&rc_A3_seq, sizeof(NR_ReportConfigToAddMod_t));
+    seq_arr_init(&neigh_seq, sizeof(nr_neighbour_cell_t));
     int scs = get_ssb_scs(cell_info);
     int band = get_dl_band(cell_info);
     const NR_MeasTimingList_t *mtlist = du->mtc->criticalExtensions.choice.c1->choice.measTimingConf->measTiming;
@@ -657,21 +660,17 @@ NR_MeasConfig_t *nr_rrc_get_measconfig(const gNB_RRC_INST *rrc, uint64_t nr_cell
          If no related A3 but there is default add the default one.
          If default one added once as a report, no need to add it again && duplication.
       */
-      rc_A3_seq = malloc(sizeof(seq_arr_t));
-      neigh_seq = malloc(sizeof(seq_arr_t));
-      seq_arr_init(rc_A3_seq, sizeof(NR_ReportConfigToAddMod_t));
-      seq_arr_init(neigh_seq, sizeof(nr_neighbour_cell_t));
       LOG_D(NR_RRC, "Preparing A3 Event Measurement Configuration!\n");
       bool default_a3_added = false; // To ensure that the default configuration is only added once
       for (int i = 0; i < neighbour_cells->size; i++) {
         nr_neighbour_cell_t *neighbourCell = (nr_neighbour_cell_t *)seq_arr_at(neighbour_cells, i);
         if (default_a3_added && neighbourCell->physicalCellId == -1)
           continue;
-        seq_arr_push_back(neigh_seq, neighbourCell, sizeof(nr_neighbour_cell_t));
+        seq_arr_push_back(&neigh_seq, neighbourCell, sizeof(nr_neighbour_cell_t));
         const nr_a3_event_t *a3Event = get_a3_configuration((gNB_RRC_INST *)rrc, neighbourCell->physicalCellId);
         if (a3Event) {
           NR_ReportConfigId_t reportConfigId = neighbourCell->physicalCellId == -1 ? 3 : i + 4;
-          seq_arr_push_back(rc_A3_seq, prepare_a3_event_report(a3Event, reportConfigId), sizeof(NR_ReportConfigToAddMod_t));
+          seq_arr_push_back(&rc_A3_seq, prepare_a3_event_report(a3Event, reportConfigId), sizeof(NR_ReportConfigToAddMod_t));
           if (neighbourCell->physicalCellId == -1)
             default_a3_added = true;
         }
@@ -681,7 +680,14 @@ NR_MeasConfig_t *nr_rrc_get_measconfig(const gNB_RRC_INST *rrc, uint64_t nr_cell
       rc_PER = prepare_periodic_event_report(rrc->measurementConfiguration.per_event);
     if (rrc->measurementConfiguration.a2_event)
       rc_A2 = prepare_a2_event_report(rrc->measurementConfiguration.a2_event);
-    return get_MeasConfig(mt, band, scs, cell_info->nr_pci, rc_PER, rc_A2, rc_A3_seq, neigh_seq);
+
+    NR_MeasConfig_t *result = get_MeasConfig(mt, band, scs, cell_info->nr_pci, rc_PER, rc_A2, &rc_A3_seq, &neigh_seq);
+
+    // Clean up sequence arrays
+    seq_arr_free(&rc_A3_seq, NULL);
+    seq_arr_free(&neigh_seq, NULL);
+
+    return result;
   }
   return NULL;
 }

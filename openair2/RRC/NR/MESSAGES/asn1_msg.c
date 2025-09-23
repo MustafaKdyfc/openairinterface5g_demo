@@ -1121,7 +1121,11 @@ NR_MeasConfig_t *get_MeasConfig(const NR_MeasTiming_t *mt,
   if (rc_A3_seq) {
     for (int i = 0; i < rc_A3_seq->size; i++) {
       NR_ReportConfigToAddMod_t *rc_A3 = (NR_ReportConfigToAddMod_t *)seq_arr_at(rc_A3_seq, i);
-      asn1cSeqAdd(&mc->reportConfigToAddModList->list, rc_A3);
+      // Create a deep copy of the report config
+      NR_ReportConfigToAddMod_t *rc_A3_copy = NULL;
+      int result = asn_copy(&asn_DEF_NR_ReportConfigToAddMod, (void **)&rc_A3_copy, rc_A3);
+      AssertFatal(result >= 0, "error during asn_copy() of ReportConfigToAddMod\n");
+      asn1cSeqAdd(&mc->reportConfigToAddModList->list, rc_A3_copy);
     }
   }
 
