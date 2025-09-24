@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "5g_platform_types.h"
 #include "openair2/RRC/NR/nr_rrc_proto.h"
 #include "openair2/RRC/NR/rrc_gNB_UE_context.h"
 #include "openair3/SECU/key_nas_deriver.h"
@@ -2464,13 +2465,11 @@ f1ap_qos_flow_param_t get_qos_char_from_qos_flow_param(const pdusession_level_qo
     qos_char.qos_type = NON_DYNAMIC;
     qos_char.nondyn.fiveQI = qos_param->fiveQI;
   }
-  const ngap_allocation_retention_priority_t *a = &qos_param->allocation_retention_priority;
+  const qos_arp_t *a = &qos_param->arp;
   qos_char.arp.prio = a->priority_level;
-  qos_char.arp.preempt_cap = a->pre_emp_capability == NGAP_PRE_EMPTION_CAPABILITY_MAY_TRIGGER_PREEMPTION
-                                 ? MAY_TRIGGER_PREEMPTION
-                                 : SHALL_NOT_TRIGGER_PREEMPTION;
-  qos_char.arp.preempt_vuln =
-      a->pre_emp_vulnerability == NGAP_PRE_EMPTION_VULNERABILITY_PREEMPTABLE ? PREEMPTABLE : NOT_PREEMPTABLE;
+  qos_char.arp.preempt_cap =
+      a->pre_emp_capability == PEC_MAY_TRIGGER_PREEMPTION ? MAY_TRIGGER_PREEMPTION : SHALL_NOT_TRIGGER_PREEMPTION;
+  qos_char.arp.preempt_vuln = a->pre_emp_vulnerability == PEV_PREEMPTABLE ? PREEMPTABLE : NOT_PREEMPTABLE;
   return qos_char;
 }
 

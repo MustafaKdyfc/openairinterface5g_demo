@@ -139,43 +139,6 @@ typedef struct ngap_ambr_s {
   bitrate_t br_dl;
 } ngap_ambr_t;
 
-typedef enum ngap_priority_level_s {
-  NGAP_PRIORITY_LEVEL_SPARE       = 0,
-  NGAP_PRIORITY_LEVEL_HIGHEST     = 1,
-  NGAP_PRIORITY_LEVEL_2           = 2,
-  NGAP_PRIORITY_LEVEL_3           = 3,
-  NGAP_PRIORITY_LEVEL_4           = 4,
-  NGAP_PRIORITY_LEVEL_5           = 5,
-  NGAP_PRIORITY_LEVEL_6           = 6,
-  NGAP_PRIORITY_LEVEL_7           = 7,
-  NGAP_PRIORITY_LEVEL_8           = 8,
-  NGAP_PRIORITY_LEVEL_9           = 9,
-  NGAP_PRIORITY_LEVEL_10          = 10,
-  NGAP_PRIORITY_LEVEL_11          = 11,
-  NGAP_PRIORITY_LEVEL_12          = 12,
-  NGAP_PRIORITY_LEVEL_13          = 13,
-  NGAP_PRIORITY_LEVEL_LOWEST      = 14,
-  NGAP_PRIORITY_LEVEL_NO_PRIORITY = 15
-} ngap_priority_level_t;
-
-typedef enum ngap_pre_emp_capability_e {
-  NGAP_PRE_EMPTION_CAPABILITY_SHALL_NOT_TRIGGER_PREEMPTION = 0,
-  NGAP_PRE_EMPTION_CAPABILITY_MAY_TRIGGER_PREEMPTION = 1,
-  NGAP_PRE_EMPTION_CAPABILITY_MAX,
-} ngap_pre_emp_capability_t;
-
-typedef enum ngap_pre_emp_vulnerability_e {
-  NGAP_PRE_EMPTION_VULNERABILITY_NOT_PREEMPTABLE = 0,
-  NGAP_PRE_EMPTION_VULNERABILITY_PREEMPTABLE = 1,
-  NGAP_PRE_EMPTION_VULNERABILITY_MAX,
-} ngap_pre_emp_vulnerability_t;
-
-typedef struct ngap_allocation_retention_priority_s {
-  ngap_priority_level_t        priority_level;
-  ngap_pre_emp_capability_t    pre_emp_capability;
-  ngap_pre_emp_vulnerability_t pre_emp_vulnerability;
-} ngap_allocation_retention_priority_t;
-
 typedef struct ngap_security_capabilities_s {
   uint16_t nRencryption_algorithms;
   uint16_t nRintegrity_algorithms;
@@ -202,14 +165,6 @@ typedef enum ngap_rrc_establishment_cause_e {
   NGAP_RRC_CAUSE_NOTAVAILABLE          = 0x10,
   NGAP_RRC_CAUSE_LAST
 } ngap_rrc_establishment_cause_t;
-
-typedef struct pdusession_level_qos_parameter_s {
-  uint8_t qfi;
-  uint64_t fiveQI;
-  uint64_t qos_priority;
-  fiveQI_t fiveQI_type;
-  ngap_allocation_retention_priority_t allocation_retention_priority;
-} pdusession_level_qos_parameter_t;
 
 typedef struct fiveg_s_tmsi_s {
   uint16_t amf_set_id;

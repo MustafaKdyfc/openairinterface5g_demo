@@ -368,11 +368,11 @@ bool trigger_bearer_setup(gNB_RRC_INST *rrc, gNB_RRC_UE_t *UE, int n, pdusession
           qos_char->non_dynamic.qos_priority_level = qos_session->qos_priority;
         }
 
-        ngran_allocation_retention_priority_t *rent_priority = &qos_flow->qos_params.alloc_reten_priority;
-        ngap_allocation_retention_priority_t *rent_priority_in = &qos_session->allocation_retention_priority;
-        rent_priority->priority_level = rent_priority_in->priority_level;
-        rent_priority->preemption_capability = rent_priority_in->pre_emp_capability;
-        rent_priority->preemption_vulnerability = rent_priority_in->pre_emp_vulnerability;
+        ngran_allocation_retention_priority_t *arp_out = &qos_flow->qos_params.alloc_reten_priority;
+        qos_arp_t *arp_in = &qos_session->arp;
+        arp_out->priority_level = arp_in->priority_level;
+        arp_out->preemption_capability = arp_in->pre_emp_capability;
+        arp_out->preemption_vulnerability = arp_in->pre_emp_vulnerability;
       }
     }
   }
