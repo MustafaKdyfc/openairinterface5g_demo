@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e
-
 function die() { echo $@; exit 1; }
 [ $# -eq 4 ] || die "usage: $0 <namespace> <release> <image tag> <oai directory>"
 
@@ -15,7 +13,11 @@ oc project ${OC_NS} > /dev/null
 oc tag oaicicd-ran/oai-physim:${IMG_TAG} ${OC_NS}/oai-physim:${IMG_TAG}
 helm install ${OC_RELEASE} ${OAI_DIR}/charts/${OC_RELEASE} --set global.image.version=${IMG_TAG} --wait --timeout 120s
 POD_ID=$(oc get pods | grep oai-${OC_RELEASE} | awk '{print $1}')
-sleep 30
+wait_creating=30
+while [[ $(oc describe pod "$POD_ID" | grep "ContainerCreating") && ${wait_creating} > 0 ]]; do
+  sleep 1;
+  let wait_creating=$wait_creating-1
+done
 echo "Monitoring logs for 'FINISHED' in pod '$POD_ID'"
 oc logs -f -n ${OC_NS} "$POD_ID" | while read -r line; do
   if [[ "$line" == *"FINISHED"* ]]; then
