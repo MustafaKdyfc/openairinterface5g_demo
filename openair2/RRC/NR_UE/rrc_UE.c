@@ -2299,7 +2299,6 @@ static int nr_rrc_ue_decode_dcch(NR_UE_RRC_INST_t *rrc,
               msg->nasMsg.nas_data = malloc(msg->nasMsg.length);
               memcpy(msg->nasMsg.nas_data, dedicatedNAS_Message->buf, msg->nasMsg.length);
               itti_send_msg_to_task(TASK_NAS_NRUE, rrc->ue_id, ittiMsg);
-              dedicatedNAS_Message->buf = NULL; // to keep the buffer, up to NAS to free it
             }
           }
         } break;
