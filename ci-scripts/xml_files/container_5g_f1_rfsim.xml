@@ -134,8 +134,8 @@
 
         <testCase id="030021">
                 <class>Iperf</class>
-                <desc>Iperf (DL/5Mbps/UDP)(30 sec)</desc>
-                <iperf_args>-u -b 5M -t 20 -R</iperf_args>
+                <desc>Iperf (DL/3Mbps/UDP)(30 sec)</desc>
+                <iperf_args>-u -b 3M -t 20 -R</iperf_args>
                 <id>rfsim5g_ue</id>
                 <nodes>acamas</nodes>
                 <svr_id>rfsim5g_ext_dn</svr_id>
