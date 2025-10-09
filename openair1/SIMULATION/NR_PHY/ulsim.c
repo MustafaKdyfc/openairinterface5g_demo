@@ -1733,7 +1733,12 @@ int main(int argc, char *argv[])
 
     if (print_perf==1) 
     {
-      printf("gNB RX\n");
+      printf("UE TX\n");
+      for (int i = PHY_PROC_TX; i <= OFDM_MOD_STATS; i++) {
+        printStatIndent(&UE->phy_cpu_stats.cpu_time_stats[i], UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
+      }
+
+      printf("\ngNB RX\n");
       printDistribution(&gNB->phy_proc_rx,table_rx, "Total PHY proc rx");
       printStatIndent(&gNB->rx_pusch_stats, "RX PUSCH time");
       printStatIndent2(&gNB->ulsch_channel_estimation_stats, "ULSCH channel estimation time");
@@ -1744,11 +1749,6 @@ int main(int argc, char *argv[])
       printStatIndent2(&gNB->ts_deinterleave, "ULSCH segment deinterleaving time");
       printStatIndent2(&gNB->ts_rate_unmatch, "ULSCH segment rate recovery time");
       printStatIndent2(&gNB->ts_ldpc_decode, "ULSCH segments decoding time");
-
-      printf("\nUE TX\n");
-      for (int i = PHY_PROC_TX; i <= OFDM_MOD_STATS; i++) {
-        printStatIndent(&UE->phy_cpu_stats.cpu_time_stats[i], UE->phy_cpu_stats.cpu_time_stats[i].meas_name);
-      }
       printStatIndent(&gNB->rx_srs_stats,"RX SRS time");
       printStatIndent2(&gNB->generate_srs_stats,"Generate SRS sequence time");
       printStatIndent2(&gNB->get_srs_signal_stats,"Get SRS signal time");

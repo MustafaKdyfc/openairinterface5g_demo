@@ -84,11 +84,12 @@ int nr_srs_channel_estimation(
     const nr_srs_info_t *nr_srs_info,
     const c16_t **srs_generated_signal,
     c16_t srs_received_signal[][gNB->frame_parms.ofdm_symbol_size * (1 << srs_pdu->num_symbols)],
+    c16_t srs_received_noise[][gNB->frame_parms.ofdm_symbol_size * (1 << srs_pdu->num_symbols)],
     c16_t srs_estimated_channel_freq[][1 << srs_pdu->num_ant_ports]
                                     [gNB->frame_parms.ofdm_symbol_size * (1 << srs_pdu->num_symbols)],
     c16_t srs_estimated_channel_time[][1 << srs_pdu->num_ant_ports][gNB->frame_parms.ofdm_symbol_size],
     c16_t srs_estimated_channel_time_shifted[][1 << srs_pdu->num_ant_ports][gNB->frame_parms.ofdm_symbol_size],
-    int8_t *snr_per_rb,
+    int16_t *snr_per_rb,
     int8_t *snr);
 
 void nr_freq_equalization(NR_DL_FRAME_PARMS *frame_parms,
