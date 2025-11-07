@@ -101,8 +101,9 @@ void L1_nr_prach_procedures(PHY_VARS_gNB *gNB, int frame, int slot, nfapi_nr_rac
           && (max_preamble_energy[0] > gNB->measurements.prach_I0 + gNB->prach_thres)
           && (rach_ind->number_of_pdus < MAX_NUM_NR_RX_RACH_PDUS)) {
         LOG_A(NR_PHY,
-              "[RAPROC] %d.%d Initiating RA procedure with preamble %d, energy %d.%d dB (I0 %d, thres %d), delay %d start symbol "
+              "occasion %d [RAPROC] %d.%d Initiating RA procedure with preamble %d, energy %d.%d dB (I0 %d, thres %d), delay %d start symbol "
               "%u freq index %u\n",
+              prach_oc,
               frame,
               prach_start_slot,
               max_preamble[0],

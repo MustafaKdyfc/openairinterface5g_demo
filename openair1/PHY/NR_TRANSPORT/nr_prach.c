@@ -29,12 +29,108 @@
  * \note
  * \warning
  */
-
+#include <math.h>
+#include <stdio.h>
 #include "PHY/defs_gNB.h"
 #include "SCHED_NR/sched_nr.h"
 #include "PHY/NR_TRANSPORT/nr_transport_proto.h"
 #include "PHY/NR_TRANSPORT/nr_transport_common_proto.h"
 #include "openair1/PHY/NR_TRANSPORT/nr_prach.h"
+#include "sockVars.h"
+#include <errno.h>
+#include <string.h>
+#include <stdlib.h>
+#include <arpa/inet.h>
+
+/*
+ * Provide weak fallback definitions for PRACH UDP globals.
+ * The project has a strong definition in `executables/sockVars.c` when
+ * building the full executable, but `libPHY_NR.a` can be built/linked
+ * without that object. Defining weak symbols here resolves linker
+ * errors when `sockVars.c` is not linked into the library. If a
+ * strong symbol exists elsewhere it will override these.
+ */
+#if defined(__GNUC__)
+__attribute__((weak)) int prach_sockfd = -1;
+__attribute__((weak)) struct sockaddr_in prach_server_addr;
+#if 1
+/* Provide weak fallbacks for the legacy names `sockfd`/`server_addr` too.
+ * This prevents undefined-reference linker errors when some translation
+ * units reference `sockfd`/`server_addr` but the strong definitions
+ * live in an executable-only source (e.g. `executables/sockVars.c`).
+ * If a strong definition exists elsewhere it will override these.
+ */
+__attribute__((weak)) int sockfd = -1;
+__attribute__((weak)) struct sockaddr_in server_addr;
+#endif
+#else
+int prach_sockfd = -1;
+struct sockaddr_in prach_server_addr;
+#if 1
+int sockfd = -1;
+struct sockaddr_in server_addr;
+#endif
+#endif
+
+/*
+ * Provide a weak fallback implementation of prach_socket_init/prach_socket_close
+ * so that `nr_prach.c` can lazily initialize the UDP socket even when
+ * `executables/sockVars.c` is not linked into the final binary. If a
+ * strong implementation exists elsewhere it will override these weak
+ * definitions.
+ */
+#if defined(__GNUC__)
+__attribute__((weak)) int prach_socket_init(const char *ip, int port) {
+  (void)ip;
+  (void)port;
+  /* Try to create a UDP socket and bind destination address if possible.
+   * We'll set prach_sockfd to -1 on failure to indicate no socket.
+   */
+  int s = socket(AF_INET, SOCK_DGRAM, 0);
+  if (s < 0) {
+    prach_sockfd = -1;
+    return -1;
+  }
+
+  prach_sockfd = s;
+  memset(&prach_server_addr, 0, sizeof(prach_server_addr));
+  prach_server_addr.sin_family = AF_INET;
+  prach_server_addr.sin_port = htons((uint16_t)port);
+  if (inet_aton(ip, &prach_server_addr.sin_addr) == 0) {
+    /* invalid ip string */
+    close(prach_sockfd);
+    prach_sockfd = -1;
+    return -1;
+  }
+
+  return 0;
+}
+
+__attribute__((weak)) void prach_socket_close(void) {
+  if (prach_sockfd >= 0) {
+    close(prach_sockfd);
+    prach_sockfd = -1;
+  }
+}
+#endif
+
+/* === ISAC/DF: per-antenna snapshot containers (dominant PRACH bin) === */
+#ifndef OAI_DF_PRACH_MIN
+#define OAI_DF_PRACH_MIN 1
+#endif
+#if OAI_DF_PRACH_MIN
+static float df_y_re[16], df_y_im[16];  /* up to 16 RX antennas */
+#endif
+/* ===================================================================== */
+
+
+// --- helper: complex int16 IQ dump ---
+static inline void dump_iq_s16(const char* path, const int16_t* iq, size_t n_complex) {
+  FILE* f = fopen(path, "wb");
+  if (!f) return;
+  fwrite(iq, sizeof(int16_t), 2*n_complex, f); // I,Q ardışık int16
+  fclose(f);
+}
 
 void init_prach_list(PHY_VARS_gNB *gNB)
 {
@@ -156,6 +252,9 @@ void free_nr_ru_prach_entry(RU_t *ru, int prach_id)
   ru->prach_list[prach_id].slot  = -1;
   pthread_mutex_unlock(&ru->prach_list_mutex);
 }
+
+// --- ADD: helper to dump complex int16 IQ ---
+
 
 void rx_nr_prach_ru(RU_t *ru,
                     int prachFormat,
@@ -399,7 +498,7 @@ void rx_nr_prach_ru(RU_t *ru,
 
   // Do forward transform
   if (LOG_DEBUGFLAG(DEBUG_PRACH)) {
-    LOG_D(PHY, "rx_prach: Doing PRACH FFT for nb_rx:%d Ncp:%d dftlen:%d\n", ru->nb_rx, Ncp, dftlen);
+    LOG_I(PHY, "rx_prach: Doing PRACH FFT for nb_rx:%d Ncp:%d dftlen:%d\n", ru->nb_rx, Ncp, dftlen);
   }
 
   const unsigned int K = get_prach_K(prach_sequence_length, prachFormat, fp->numerology_index, prach_mu);
@@ -415,29 +514,120 @@ void rx_nr_prach_ru(RU_t *ru,
   k*=K;
   k+=kbar;
 
+  static int dump_counter = 0;
+  static const int MAX_DUMPS = 4;  // Sadece 4 kez kaydet
+
   for (int aa=0; aa<ru->nb_rx; aa++) {
-    AssertFatal(prach[aa]!=NULL,"prach[%d] is null\n",aa);
+      AssertFatal(prach[aa]!=NULL,"prach[%d] is null\n",aa);
 
-    // do DFT
-    int16_t *prach2 = prach[aa] + (2*Ncp); // times 2 for complex samples
-    for (int i = 0; i < reps; i++)
-      dft(dftsize, prach2 + 2*dftlen*i, rxsigF[aa] + 2*dftlen*i, 1);
+      // do DFT
+      int16_t *prach2 = prach[aa] + (2*Ncp);
+      for (int i = 0; i < reps; i++)
+        dft(dftsize, prach2 + 2*dftlen*i, rxsigF[aa] + 2*dftlen*i, 1);
 
-    //LOG_M("ru_rxsigF_tmp.m","rxsFtmp", rxsigF[aa], dftlen*2*reps, 1, 1);
+      // ============ CRITICAL: SEND RAW PRACH DATA BEFORE COMBINING ============
+      int16_t *rxsigF2 = rxsigF[aa];
+      int k2 = k << 1;
+      
+      // Allocate buffer for RAW extraction (before combining)
+      int16_t raw_iq[N_ZC * 2];  // I,Q pairs
+      
+      // Extract N_ZC samples starting from k (wrapping around if needed)
+      for (int j = 0; j < (N_ZC << 1); j++, k2++) {
+          if (k2 >= (dftlen << 1)) k2 = 0;
+          raw_iq[j] = rxsigF2[k2];  // Take FIRST repetition only
+      }
 
-    //Coherent combining of PRACH repetitions (assumes channel does not change, to be revisted for "long" PRACH)
-    LOG_D(PHY,"Doing PRACH combining of %d reptitions N_ZC %d\n",reps,N_ZC);
-    int16_t rxsigF_tmp[N_ZC<<1];
-    //    if (k+N_ZC > dftlen) { // PRACH signal is split around DC 
-    int16_t *rxsigF2=rxsigF[aa];
-    int k2=k<<1;
-
-    for (int j=0;j<N_ZC<<1;j++,k2++) {
-      if (k2==(dftlen<<1)) k2=0;
-      rxsigF_tmp[j] = rxsigF2[k2];
-      for (int i=1;i<reps;i++) rxsigF_tmp[j] += rxsigF2[k2+(i*dftlen<<1)];
+    // Send RAW IQ data over UDP (BEFORE combining)
+    // Lazy-init the PRACH socket so nr_prach can send without an external
+    // sender having to initialize sockets beforehand.
+    if (prach_sockfd < 0) {
+      if (prach_socket_init("127.0.0.1", 5678) < 0) {
+        LOG_W(PHY, "PRACH: lazy socket init failed, will skip UDP send\n");
+      } else {
+        LOG_I(PHY, "PRACH: lazy socket initialized to 127.0.0.1:5678\n");
+      }
     }
-    memcpy((void*)rxsigF2,(void *)rxsigF_tmp,N_ZC<<2);
+
+    if (prach_sockfd >= 0) {
+      typedef struct {
+        uint32_t frame;
+        uint32_t slot;
+        uint8_t antenna;
+        uint8_t prachOccasion;
+        uint16_t N_ZC;
+        uint16_t data_len_bytes;
+      } __attribute__((packed)) prach_header_t;
+
+      prach_header_t header;
+      header.frame = htonl((uint32_t)frame);
+      header.slot = htonl((uint32_t)slot);
+      header.antenna = (uint8_t)aa;
+      header.prachOccasion = (uint8_t)prachOccasion;
+      header.N_ZC = htons((uint16_t)N_ZC);
+      uint32_t payload_bytes = (uint32_t)((size_t)N_ZC * 2 * sizeof(int16_t));
+      header.data_len_bytes = htons((uint16_t)payload_bytes);
+
+      /* quick diagnostic: compute energy (sum of squares) to detect all-zero buffers */
+      uint64_t raw_energy = 0;
+      for (int ej = 0; ej < (N_ZC << 1); ej += 2) {
+        int32_t re = raw_iq[ej];
+        int32_t im = raw_iq[ej+1];
+        raw_energy += (uint64_t)(re * re) + (uint64_t)(im * im);
+      }
+      if (raw_energy == 0) {
+        LOG_W(PHY, "PRACH RAW energy==0 ant%d fr=%d sl=%d occ=%d — skipping send\n", aa, frame, slot, prachOccasion);
+      } else {
+        size_t total_size = sizeof(prach_header_t) + payload_bytes;
+        uint8_t *packet = malloc(total_size);
+
+        if (packet) {
+          memcpy(packet, &header, sizeof(prach_header_t));
+          memcpy(packet + sizeof(prach_header_t), raw_iq, payload_bytes);
+
+          ssize_t sent = sendto(prach_sockfd, packet, total_size, 0,
+                    (struct sockaddr*)&prach_server_addr, sizeof(prach_server_addr));
+          if (sent < 0) {
+            LOG_E(PHY, "Failed to send PRACH data ant%d: %s\n", aa, strerror(errno));
+          } else if ((size_t)sent != total_size) {
+            LOG_W(PHY, "Partial send ant%d: %zd/%zu bytes\n", aa, sent, total_size);
+          } else {
+            LOG_D(PHY, "Sent RAW PRACH ant%d: fr=%d sl=%d occ=%d size=%zu\n",
+              aa, frame, slot, prachOccasion, total_size);
+          }
+
+          free(packet);
+        } else {
+          LOG_E(PHY, "Failed to allocate packet buffer for antenna %d\n", aa);
+        }
+      }
+    }
+      
+      // Optional: Dump RAW data to file for verification
+      char fn[160];
+      snprintf(fn, sizeof(fn), "/tmp/prach_ru_raw_occ%03d_ant%02d_fr%04d_sl%03d.bin",
+              prachOccasion, aa, frame, slot);
+      dump_iq_s16(fn, raw_iq, N_ZC);
+
+      // ============ NOW DO THE COMBINING (for internal processing) ============
+      int16_t rxsigF_tmp[N_ZC << 1];
+      k2 = k << 1;
+      
+      for (int j = 0; j < (N_ZC << 1); j++, k2++) {
+          if (k2 >= (dftlen << 1)) k2 = 0;
+          rxsigF_tmp[j] = rxsigF2[k2];
+          // Combine repetitions
+          for (int i = 1; i < reps; i++) {
+              int idx = k2 + (i * dftlen << 1);
+              rxsigF_tmp[j] += rxsigF2[idx];
+          }
+      }
+      memcpy((void*)rxsigF2, (void*)rxsigF_tmp, N_ZC << 2);
+      
+      // Dump COMBINED data (for comparison)
+      snprintf(fn, sizeof(fn), "/tmp/prach_ru_combined_occ%03d_ant%02d_fr%04d_sl%03d.bin",
+              prachOccasion, aa, frame, slot);
+      dump_iq_s16(fn, (const int16_t*)rxsigF2, N_ZC);
   }
 }
 
@@ -461,6 +651,16 @@ void rx_nr_prach(PHY_VARS_gNB *gNB,
   int nb_rx;
 
   int16_t **rxsigF = gNB->prach_vars.rxsigF;
+
+  // --- ADD: dump gNB-side PRACH-F before correlation (antenna 0) ---
+{
+  char fn[160];
+  // Not: prachOccasion bu fonksiyona argüman olarak geliyor
+  snprintf(fn, sizeof(fn), "/tmp/prach_gnb_f_occ%03d_fr%04d_sl%03d_ant00.bin",
+           prachOccasion, frame, slot);
+  dump_iq_s16(fn, (const int16_t*)rxsigF[0], (gNB->gNB_config.prach_config.prach_sequence_length.value==0)?839:139);
+}
+
 
   uint8_t preamble_index;
   uint16_t NCS=99,NCS2;
@@ -523,9 +723,23 @@ void rx_nr_prach(PHY_VARS_gNB *gNB,
   *max_preamble_delay = 0;
   *max_preamble = 0;
   int16_t prachF[2 * 1024];
+
+  
   for (preamble_index=0 ; preamble_index<64 ; preamble_index++) {
     if (LOG_DEBUGFLAG(DEBUG_PRACH)) {
       int en = dB_fixed(signal_energy((int32_t*)&rxsigF[0][0],(N_ZC==839) ? 840: 140));
+      
+
+      if (en > 0) {  // enerji varsa yaz
+      char fn[160];
+      snprintf(fn, sizeof(fn),
+           "/tmp/prach_gnb_f_occ%03d_fr%04d_sl%03d_ant00.bin",
+           prachOccasion, frame, slot);
+      dump_iq_s16(fn, (const int16_t*)rxsigF[0], N_ZC);
+  }     
+    else {
+    LOG_W(PHY,"[DUMP] rxsigF energy=0, dump atlanıyor (fr=%d, sl=%d, occ=%d)\n", frame, slot, prachOccasion);
+  }
       if (en>60) LOG_D(PHY,"frame %d, slot %d : Trying preamble %d \n",frame,slot,preamble_index);
     }
     if (restricted_set == 0) {
@@ -621,7 +835,7 @@ void rx_nr_prach(PHY_VARS_gNB *gNB,
     LOG_D(PHY,"PRACH RX preamble_index %d, preamble_offset %d\n",preamble_index,preamble_offset);
 
 
-    if (new_dft == 1) {
+    if (new_dft == 1) {SASDS
       new_dft = 0;
 
       Xu = (int16_t*)gNB->X_u[preamble_offset-first_nonzero_root_idx];
@@ -642,6 +856,23 @@ void rx_nr_prach(PHY_VARS_gNB *gNB,
           prachF[offset] = (int16_t)(((int32_t)Xu[offset]*rxsigF[aa][offset] + (int32_t)Xu[offset+1]*rxsigF[aa][offset+1])>>15);
           prachF[offset+1] = (int16_t)(((int32_t)Xu[offset]*rxsigF[aa][offset+1] - (int32_t)Xu[offset+1]*rxsigF[aa][offset])>>15);
         }
+        #if OAI_DF_PRACH_MIN
+          /* --- ISAC/DF: take the dominant PRACH bin in prachF for this antenna --- */
+          if (aa == 0) { int z; for (z=0; z<16; z++) { df_y_re[z]=0.0f; df_y_im[z]=0.0f; } }
+          {
+            int best = 0;
+            long long bestp = -1;
+            for (int idx = 0; idx < (N_ZC<<1); idx += 2) {
+              int re = (int)prachF[idx];
+              int im = (int)prachF[idx+1];
+              long long p = (long long)re*re + (long long)im*im;
+              if (p > bestp) { bestp = p; best = idx; }
+            }
+            df_y_re[aa] = (float)prachF[best];
+            df_y_im[aa] = (float)prachF[best+1];
+          }
+          /* ---------------------------------------------------------------------- */
+        #endif
 	
         // Now do IFFT of size 1024 (N_ZC=839) or 256 (N_ZC=139)
         if (N_ZC == 839) {
@@ -720,6 +951,93 @@ void rx_nr_prach(PHY_VARS_gNB *gNB,
       *TA = *TA * 3 * (1 << mu) / 8;
   }
   else *TA = *TA/2;
+  
+  #if OAI_DF_PRACH_MIN
+    /* ================== ISAC/DF: Tikhonov-weighted steering scan ================== */
+    do {
+      int M = nb_rx;
+      if (M < 2) break;
+
+      /* 2.1 Phase calibration to antenna-0 (like cal_data.m, single snapshot) */
+      {
+        float r0 = df_y_re[0], i0 = df_y_im[0];
+        float p0 = r0*r0 + i0*i0; if (p0 < 1e-6f) p0 = 1e-6f;
+        for (int a=0; a<M; a++) {
+          float rx = df_y_re[a], ix = df_y_im[a];
+          /* multiply by conj(ref)/|ref| */
+          float t_re =  rx*r0 + ix*i0;
+          float t_im = -rx*i0 + ix*r0;
+          df_y_re[a] = t_re / p0;
+          df_y_im[a] = t_im / p0;
+        }
+        df_y_re[0] = 1.0f; df_y_im[0] = 0.0f;
+      }
+
+      /* 2.2 Array geometry (meters) — your X410 non-uniform 4-elt NULA */
+      float el_m[16] = {0};
+      if (M>1) el_m[1] = 0.0475f;
+      if (M>2) el_m[2] = 0.1050f;
+      if (M>3) el_m[3] = 0.1525f;
+
+      /* 2.3 Wavelength from UL/DL carrier (fallback 2.60 GHz) */
+      const float c0 = 299792458.0f;
+      float fc = (float)gNB->frame_parms.ul_CarrierFreq;
+      if (fc <= 1.0f) fc = (float)gNB->frame_parms.dl_CarrierFreq;
+      if (fc <= 1.0f) fc = 2.60e9f;
+      float lambda = c0 / fc;
+
+      /* 2.4 Tikhonov-weighted score:
+            score(θ) = |a(θ)^H y|^2 / (a(θ)^H a(θ) + α)
+        With normalized y, a^H a is ~M; choose small α to stabilize.
+      */
+      const float alpha = 1e-3f;  /* small Tikhonov; tune if needed */
+
+      int   Kscan = 181;
+      float bestS = -1.0f;
+      int   bestk = 0;
+
+      for (int k=0; k<Kscan; k++) {
+        float theta_deg = -90.0f + (float)k;
+        float st = sinf(theta_deg * (3.14159265358979323846f/180.0f));
+
+        /* a(θ) and dot = a^H y */
+        float dot_re = 0.0f, dot_im = 0.0f;
+        float a2 = 0.0f;
+        for (int a=0; a<M; a++) {
+          float phase = 2.0f*3.14159265358979323846f * (el_m[a]/lambda) * st;
+          float ar = cosf(phase);     /* real steering */
+          float ai = sinf(phase);     /* imag steering */
+          /* conj(a) * y -> (ar - j ai) * (y_re + j y_im) */
+          dot_re +=  ar*df_y_re[a] + ai*df_y_im[a];
+          dot_im += -ai*df_y_re[a] + ar*df_y_im[a];
+          a2     +=  ar*ar + ai*ai;   /* =1 per element, sums to M */
+        }
+        float num = dot_re*dot_re + dot_im*dot_im;   /* |a^H y|^2 */
+        float den = a2 + alpha;                      /* M + α */
+        float score = num / den;
+
+        if (score > bestS) { bestS = score; bestk = k; }
+      }
+
+      float doa_hat = -90.0f + (float)bestk;
+
+      /* Optional: only print on real PRACH detections + once per frame.slot */
+      #ifndef PRACH_DF_MIN_ENERGY_X10
+      #define PRACH_DF_MIN_ENERGY_X10 400  /* 40.0 dB default threshold */
+      #endif
+      
+      static int df_last_frame = -1, df_last_slot = -1, df_last_pre = -1;
+      if (*max_preamble_energy >= PRACH_DF_MIN_ENERGY_X10 &&
+          (frame != df_last_frame || slot != df_last_slot || *max_preamble != df_last_pre)) {
+        LOG_I(PHY, "[PRACH-DF(OptA)] M=%d, fc=%.3f GHz, DoA=%.1f deg, maxEn=%d, TA=%u, RAPID=%u, %d.%d\n",
+              M, fc*1e-9f, doa_hat, (int)(*max_preamble_energy), (unsigned int)(*max_preamble_delay),
+              (unsigned)(*max_preamble), frame, slot);
+        df_last_frame = frame; df_last_slot = slot; df_last_pre = *max_preamble;
+      }
+    } while(0);
+    /* =========================================================================== */
+    #endif
+
 
   if (LOG_DUMPFLAG(DEBUG_PRACH)) {
     //int en = dB_fixed(signal_energy((int32_t*)&rxsigF[0][0],840));
@@ -738,6 +1056,37 @@ void rx_nr_prach(PHY_VARS_gNB *gNB,
       LOG_M("prach_ifft0.m","prach_t0", prach_ifft, 1024, 1, 1);
       //    }
   }
+  /*
+    if (sockfd >= 0) {
+  const int nb_rx = gNB->gNB_config.carrier_config.num_rx_ant.value;
+  /* compute bytes dynamically: N_ZC complex samples -> N_ZC*2 int16_t values */
+  //const size_t nbytes = (size_t)N_ZC * 2 * sizeof(int16_t);
+    /*
+    LOG_I(PHY, "[PRACH-RAW] Sending raw rxsigF before correlation @ %d.%d\n", 
+          frame, slot);
+    
+    for (int aa = 0; aa < nb_rx; aa++) {
+      // rxsigF[aa] = ham frekans-domain PRACH verisi (henüz işlenmemiş)
+      const int16_t *iq = (const int16_t *)rxsigF[aa];
+      
+      ssize_t sent = sendto(sockfd, iq, nbytes, 0,
+                            (struct sockaddr*)&server_addr, 
+                            sizeof(server_addr));
+      
+      if (sent == nbytes) {
+        LOG_I(PHY, "[PRACH-RAW] ant %d: %zd bytes sent OK\n", aa, sent);
+      } else {
+        LOG_E(PHY, "[PRACH-RAW] ant %d FAILED: %zd/%zu (%s)\n", 
+              aa, sent, nbytes, sent < 0 ? strerror(errno) : "partial");
+      }
+      
+      usleep(1000);  // 1ms between antennas
+    }
+  } else {
+    LOG_W(PHY, "[PRACH-RAW] Socket not initialized (sockfd=%d)\n", sockfd);
+    */
+  
+  
   stop_meas(&gNB->rx_prach);
 
 }

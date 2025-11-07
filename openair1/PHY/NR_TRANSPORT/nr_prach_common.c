@@ -38,6 +38,7 @@
 #include "common/utils/LOG/log.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
 #include "T.h"
+#define M_PI 3.14159265359 
 
 /* Extended Euclidean Algorithm to compute modulo inverse */
 static int modulo_multiplicative_inverse(const int a, const int m)

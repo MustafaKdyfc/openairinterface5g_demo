@@ -1120,6 +1120,12 @@ static void nr_add_msg3(module_id_t module_idP, int CC_id, frame_t frameP, slot_
     return;
   }
 
+  if (ra->preamble_index == 60) {
+    LOG_I(NR_MAC,"[ISAC] Blocking Msg3 for RAPID %d (DF-only). Forcing RA idle.\n", ra->preamble_index);
+    ra->ra_state = nrRA_gNB_IDLE;     // reset this RA attempt so UE retries PRACH
+    return;                           // do NOT allocate PUSCH/Msg3
+  }
+
   const uint16_t mask = SL_to_bitmap(ra->msg3_startsymb, ra->msg3_nbSymb);
   int slots_frame = mac->frame_structure.numb_slots_frame;
   int buffer_index = ul_buffer_index(ra->Msg3_frame, ra->Msg3_slot, slots_frame, mac->vrb_map_UL_size);

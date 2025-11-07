@@ -32,6 +32,7 @@
 #include "PHY/sse_intrin.h"
 #include "common/utils/LOG/vcd_signal_dumper.h"
 
+#define M_PI 3.14159265359 
 #include "PHY/impl_defs_nr.h"
 #include "PHY/defs_nr_UE.h"
 #include "PHY/NR_UE_TRANSPORT/nr_transport_proto_ue.h"

@@ -139,6 +139,7 @@ static csi_payload_t get_csirs_RSRP_payload(NR_UE_MAC_INST_t *mac,
                                             struct NR_CSI_ReportConfig *csi_reportconfig,
                                             NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
                                             const NR_CSI_MeasConfig_t *csi_MeasConfig);
+static uint8_t get_rsrp_index(int rsrp);
 
 static uint8_t get_rsrp_diff_index(int best_rsrp, int current_rsrp);
 
@@ -364,6 +365,18 @@ void nr_ue_decode_BCCH_DL_SCH(NR_UE_MAC_INST_t *mac,
                               int frame,
                               int slot)
 {
+  if (mac->ra.ra_PreambleIndex == 60) {
+    LOG_I(NR_MAC,
+          "[ISAC][UE %d] DF mode: skipping SIB1/SI decode (ack=%u, len=%u) at %d.%d\n",
+          mac->ue_id, ack_nack, (unsigned)pdu_len, frame, slot);
+    /* Optional: clear SI request flags so we don't keep trying in DF mode */
+    if (mac->get_sib1) mac->get_sib1 = false;
+    for (int i = 0; i < MAX_SI_GROUPS; i++) {
+      if (mac->get_otherSI[i]) mac->get_otherSI[i] = false;
+    }
+    mac->si_SchedInfo.si_window_start = -1;
+    return;  /* do not call nr_mac_rrc_data_ind_ue(), keep logs clean */
+  }
   if(ack_nack) {
     LOG_D(NR_MAC, "Decoding NR-BCCH-DL-SCH-Message (SIB1 or SI)\n");
     nr_mac_rrc_data_ind_ue(mac->ue_id, cc_id, gNB_index, frame, slot, 0, mac->physCellId, 0, NR_BCCH_DL_SCH, (uint8_t *) pduP, pdu_len);
@@ -2916,18 +2929,6 @@ static int compare_ssb_rsrp(const void *a, const void *b)
   return mb->ssb_rsrp_dBm - ma->ssb_rsrp_dBm;
 }
 
-// returns index from RSRP
-// according to Table 10.1.6.1-1 in 38.133
-static uint8_t get_rsrp_index(int rsrp)
-{
-  int index = rsrp + 157;
-  if (rsrp > -44)
-    index = 113;
-  if (rsrp < -140)
-    index = 16;
-  return index;
-}
-
 static csi_payload_t get_ssb_rsrp_payload(NR_UE_MAC_INST_t *mac,
                                           struct NR_CSI_ReportConfig *csi_reportconfig,
                                           NR_CSI_ResourceConfigId_t csi_ResourceConfigId,
@@ -3137,14 +3138,15 @@ static csi_payload_t get_csirs_RSRP_payload(NR_UE_MAC_INST_t *mac,
           }
 
           // TODO: Improvements will be needed to cri_ssbri_bitlen>0
-          temp_payload = get_rsrp_index(mac->l1_measurements.rsrp_dBm);
-          temp_payload = reverse_bits(temp_payload, n_bits);
+          temp_payload = reverse_bits(mac->l1_measurements.rsrp_dBm, n_bits); // rsrp_dBm as in TS 38.133 - Table 10.1.6.1-1
 
           LOG_D(NR_MAC, "cri_ssbri_bitlen = %d\n", cri_ssbri_bitlen);
           LOG_D(NR_MAC, "rsrp_bitlen = %d\n", rsrp_bitlen);
           LOG_D(NR_MAC, "diff_rsrp_bitlen = %d\n", diff_rsrp_bitlen);
+
           LOG_D(NR_MAC, "n_bits = %d\n", n_bits);
           LOG_D(NR_MAC, "csi_part1_payload = 0x%lx\n", temp_payload);
+
           break;
         }
       }
@@ -3153,6 +3155,20 @@ static csi_payload_t get_csirs_RSRP_payload(NR_UE_MAC_INST_t *mac,
   AssertFatal(n_bits <= 32, "Not supporting CSI report with more than 32 bits\n");
   csi_payload_t csi = {.part1_payload = temp_payload, .p1_bits = n_bits, csi.p2_bits = 0};
   return csi;
+}
+
+// returns index from RSRP
+// according to Table 10.1.6.1-1 in 38.133
+
+static uint8_t get_rsrp_index(int rsrp)
+{
+  int index = rsrp + 157;
+  if (rsrp>-44)
+    index = 113;
+  if (rsrp<-140)
+    index = 16;
+
+  return index;
 }
 
 // returns index from differential RSRP
@@ -4304,6 +4320,13 @@ static void nr_ue_process_rar(NR_UE_MAC_INST_t *mac, nr_downlink_indication_t *d
       }
       break;
     }
+
+    if (preamble_index == 60) {
+      nr_ra_backoff_setting(&mac->ra);
+      LOG_I(NR_MAC,"[ISAC][UE %d] DF mode: ignoring RAR (RAPID 60). Backing off.\n", mac->ue_id);
+      return;  // leave the handler immediately
+    }
+
     if (rarh->E == 0) {
       LOG_W(NR_MAC,"[UE %d][RAPROC][%d.%d] Received RAR preamble (%d) doesn't match the intended RAPID (%d)\n",
             mac->ue_id,

@@ -88,6 +88,11 @@ unsigned short config_frames[4] = {2,9,11,13};
 #include "openair1/SCHED_NR/sched_nr.h"
 #include "openair2/SDAP/nr_sdap/nr_sdap.h"
 
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include "executables/sockVars.h"
+
 pthread_cond_t nfapi_sync_cond;
 pthread_mutex_t nfapi_sync_mutex;
 int nfapi_sync_var=-1; //!< protected by mutex \ref nfapi_sync_mutex

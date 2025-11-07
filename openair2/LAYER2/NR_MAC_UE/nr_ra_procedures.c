@@ -337,12 +337,22 @@ static void config_preamble_index(NR_UE_MAC_INST_t *mac)
     }
   }
   int pream_per_ssb = min(ra->ssb_ro_config.preambles_per_ssb, nb_of_preambles);
-  int rand_preamb = rand_r(&seed) % pream_per_ssb;
-  if (ra->ssb_ro_config.ssb_per_ro < 1)
-    ra->ra_PreambleIndex = groupOffset + rand_preamb;
-  else {
-    int ssb_pr_idx = mac->ssb_list.nb_ssb_per_index[mac->mib_ssb] % (int)ra->ssb_ro_config.ssb_per_ro;
-    ra->ra_PreambleIndex = groupOffset + (ssb_pr_idx * ra->ssb_ro_config.preambles_per_ssb) + rand_preamb;
+  int rand_preamb   = rand_r(&seed) % pream_per_ssb;
+
+  #ifndef ISAC_RA_BACKOFF_SLOTS
+  #define ISAC_RA_BACKOFF_SLOTS 5000  
+  #endif
+
+  if (ra->ssb_ro_config.ssb_per_ro < 1) {
+    // ra->ra_PreambleIndex = groupOffset + rand_preamb;
+    ra->ra_PreambleIndex = 60;
+    ra->RA_backoff_limit = ISAC_RA_BACKOFF_SLOTS;
+  } else {
+    int ssb_pr_idx = mac->ssb_list.nb_ssb_per_index[mac->mib_ssb] %
+                    (int)ra->ssb_ro_config.ssb_per_ro;
+    // ra->ra_PreambleIndex = groupOffset + (ssb_pr_idx * ra->ssb_ro_config.preambles_per_ssb) + rand_preamb;
+    ra->ra_PreambleIndex = 60;
+    ra->RA_backoff_limit = ISAC_RA_BACKOFF_SLOTS;
   }
 }
 
@@ -358,7 +368,8 @@ static void configure_ra_preamble(NR_UE_MAC_INST_t *mac)
 
     if (ra->pdcch_order.active && ra->pdcch_order.preamble_index != 0xb000000) {
       // set the PREAMBLE_INDEX to the signalled ra-PreambleIndex;
-      ra->ra_PreambleIndex = ra->pdcch_order.preamble_index;
+      //ra->ra_PreambleIndex = ra->pdcch_order.preamble_index;
+      ra->ra_PreambleIndex = 60;
       // select the SSB signalled by PDCCH
       ssb = ra->pdcch_order.ssb_index;
       ra->ro_mask_index = ra->pdcch_order.prach_mask;
@@ -373,7 +384,8 @@ static void configure_ra_preamble(NR_UE_MAC_INST_t *mac)
         if (res->ssb == mac->mib_ssb) {
           ssb = mac->mib_ssb;
           // set the PREAMBLE_INDEX to a ra-PreambleIndex corresponding to the selected SSB
-          ra->ra_PreambleIndex = res->ra_PreambleIndex;
+          //ra->ra_PreambleIndex = res->ra_PreambleIndex;
+          ra->ra_PreambleIndex = 60;
           ra->ro_mask_index = ssb_list->ra_ssb_OccasionMaskIndex;
           break;
         }
@@ -397,7 +409,8 @@ static void configure_ra_preamble(NR_UE_MAC_INST_t *mac)
         if (res->ssb == mac->mib_ssb) {
           ssb = mac->mib_ssb;
           // set the PREAMBLE_INDEX to a ra-PreambleIndex corresponding to the selected SSB
-          ra->ra_PreambleIndex = res->ra_PreambleIndex;
+          //ra->ra_PreambleIndex = res->ra_PreambleIndex;
+          ra->ra_PreambleIndex = 60;
           ra->ro_mask_index = cfra->resourcesTwoStep_r16.ra_ssb_OccasionMaskIndex;
           break;
         }
@@ -1213,7 +1226,8 @@ void nr_rar_not_successful(NR_UE_MAC_INST_t *mac)
   LOG_W(MAC, "[UE %d] RAR reception failed\n", mac->ue_id);
   RA_config_t *ra = &mac->ra;
   NR_PRACH_RESOURCES_t *prach_resources = &ra->prach_resources;
-  prach_resources->preamble_tx_counter++;
+  //prach_resources->preamble_tx_counter++;
+  //prach_resources->preamble_tx_counter;
   bool ra_completed = false;
   if (prach_resources->preamble_tx_counter == ra->preambleTransMax + 1) {
     // if the Random Access Preamble is transmitted on the SpCell

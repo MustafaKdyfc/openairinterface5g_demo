@@ -2500,6 +2500,7 @@ NR_UE_info_t *find_ra_UE(NR_UEs_t *UEs, rnti_t rntiP)
   return NULL;
 }
 
+
 void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_allocator_t *uia)
 {
   ASN_STRUCT_FREE(asn_DEF_NR_CellGroupConfig, UE->CellGroup);
@@ -2521,6 +2522,7 @@ void delete_nr_ue_data(NR_UE_info_t *UE, NR_COMMON_channels_t *ccPtr, uid_alloca
   free_and_zero(UE->ra);
   free(UE);
 }
+
 
 #define TB_SINGLE_LAYER (32 * 1024)
 uint8_t *allocate_transportBlock_buffer(byte_array_t *tb, uint32_t needed)

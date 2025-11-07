@@ -607,10 +607,10 @@ static void nr_rrc_process_dedicatedNAS_MessageList(NR_UE_RRC_INST_t *rrc, NR_RR
       nas_establish_cnf_t *msg = &NAS_CONN_ESTABLI_CNF(ittiMsg);
       msg->errCode = AS_SUCCESS;
       msg->nasMsg.length = tmp->list.array[i]->size;
-      msg->nasMsg.nas_data = malloc_or_fail(msg->nasMsg.length);
-      memcpy(msg->nasMsg.nas_data, tmp->list.array[i]->buf, msg->nasMsg.length);
+      msg->nasMsg.nas_data = tmp->list.array[i]->buf;
       itti_send_msg_to_task(TASK_NAS_NRUE, rrc->ue_id, ittiMsg);
     }
+    tmp->list.count = 0; // to prevent the automatic free by ASN1_FREE
   }
 }
 
@@ -2299,6 +2299,7 @@ static int nr_rrc_ue_decode_dcch(NR_UE_RRC_INST_t *rrc,
               msg->nasMsg.nas_data = malloc(msg->nasMsg.length);
               memcpy(msg->nasMsg.nas_data, dedicatedNAS_Message->buf, msg->nasMsg.length);
               itti_send_msg_to_task(TASK_NAS_NRUE, rrc->ue_id, ittiMsg);
+              dedicatedNAS_Message->buf = NULL; // to keep the buffer, up to NAS to free it
             }
           }
         } break;
@@ -2588,14 +2589,14 @@ void *rrc_nrue(void *notUsed)
           NR_RRC_MAC_MEAS_DATA_IND(msg_p).is_neighboring_cell? "Neighboring cell" : "Active cell",
           NR_RRC_MAC_MEAS_DATA_IND(msg_p).Nid_cell,
           NR_RRC_MAC_MEAS_DATA_IND(msg_p).is_csi_meas ? "CSI meas" : "SSB meas",
-          NR_RRC_MAC_MEAS_DATA_IND(msg_p).rsrp_dBm);
+          NR_RRC_MAC_MEAS_DATA_IND(msg_p).rsrp_dBm - 157);
 
     rrcPerNB_t *rrcNB = rrc->perNB + NR_RRC_MAC_MEAS_DATA_IND(msg_p).gnb_index;
     nr_ue_meas_filtering(rrcNB,
                          NR_RRC_MAC_MEAS_DATA_IND(msg_p).is_neighboring_cell,
                          NR_RRC_MAC_MEAS_DATA_IND(msg_p).Nid_cell,
                          NR_RRC_MAC_MEAS_DATA_IND(msg_p).is_csi_meas,
-                         NR_RRC_MAC_MEAS_DATA_IND(msg_p).rsrp_dBm);
+                         NR_RRC_MAC_MEAS_DATA_IND(msg_p).rsrp_dBm - 157);
     nr_ue_check_meas_report(rrc, NR_RRC_MAC_MEAS_DATA_IND(msg_p).gnb_index);
     break;
 
@@ -3165,8 +3166,10 @@ void nr_rrc_going_to_IDLE(NR_UE_RRC_INST_t *rrc,
 
   // enter RRC_IDLE
   LOG_I(NR_RRC, "RRC moved into IDLE state\n");
-  if (rrc->nrRrcState != RRC_STATE_DETACH_NR)
+  if (rrc->nrRrcState != RRC_STATE_DETACH_NR) {
+    exit(0);
     rrc->nrRrcState = RRC_STATE_IDLE_NR;
+  }
 
   rrc->rnti = 0;
 
