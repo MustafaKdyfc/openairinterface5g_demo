@@ -835,7 +835,7 @@ void rx_nr_prach(PHY_VARS_gNB *gNB,
     LOG_D(PHY,"PRACH RX preamble_index %d, preamble_offset %d\n",preamble_index,preamble_offset);
 
 
-    if (new_dft == 1) {SASDS
+    if (new_dft == 1) {
       new_dft = 0;
 
       Xu = (int16_t*)gNB->X_u[preamble_offset-first_nonzero_root_idx];
