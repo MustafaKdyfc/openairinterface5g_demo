@@ -268,6 +268,9 @@ void rx_nr_prach_ru(RU_t *ru,
 {
   AssertFatal(ru != NULL,"ru is null\n");
 
+  /* Log RU index and configured number of RX antennas for easier debugging */
+  LOG_I(PHY, "rx_nr_prach_ru: ru_idx=%d nb_rx=%d prachOcc=%d frame=%d slot=%d\n", ru->idx, ru->nb_rx, prachOccasion, frame, slot);
+
   NR_DL_FRAME_PARMS *fp = ru->nr_frame_parms;
   int slot2 = slot;
   int16_t *prach[ru->nb_rx];

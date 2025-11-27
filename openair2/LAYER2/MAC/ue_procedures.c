@@ -471,7 +471,7 @@ ue_send_sdu(module_id_t module_idP,
 
         case TIMING_ADV_CMD:
 #ifdef DEBUG_HEADER_PARSING
-          LOG_D(MAC, "[UE] CE %d : UE Timing Advance : %d\n", i,
+          LOG_I(MAC, "[UE] CE %d : UE Timing Advance : %d\n", i,
                 payload_ptr[0]);
 #endif
 
