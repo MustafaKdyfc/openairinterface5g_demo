@@ -38,12 +38,27 @@ SAVE_DIR = os.path.expanduser('~/prach_udp_rec')
 
 
 def try_parse_header(data: bytes):
-    # header is packed and 14 bytes long (4+4+1+1+2+2)
-    if len(data) < 14:
+    # Expect a 4-byte magic prefix followed by a 14-byte header
+    # wire layout: 'PRCH' + 14-byte header ('!II2B2H') + payload
+    if len(data) < 18:
         return None
     try:
+        if data[:4] != b'PRCH':
+            return None
         # '!II2B2H' -> network byte order: uint32, uint32, 2xuint8, 2xuint16
-        frame, slot, antenna, prachOcc, N_ZC, data_len = struct.unpack('!II2B2H', data[:14])
+        frame, slot, antenna, prachOcc, N_ZC, data_len = struct.unpack('!II2B2H', data[4:18])
+        # Basic plausibility checks to avoid mis-parsing raw IQ as header
+        remaining = len(data) - 18
+        # data_len is interpreted as number of int16 values in payload
+        expected_bytes = data_len * 2
+        if antenna > 16:
+            return None
+        if N_ZC not in (139, 839):
+            return None
+        # allow some tolerance: expected_bytes should not exceed remaining
+        if expected_bytes > remaining or expected_bytes == 0 or expected_bytes > 65536:
+            return None
+
         return {
             'frame': frame,
             'slot': slot,
@@ -51,7 +66,7 @@ def try_parse_header(data: bytes):
             'prachOcc': prachOcc,
             'N_ZC': N_ZC,
             'data_len': data_len,
-            'payload': data[14:]
+            'payload': data[18:18+expected_bytes]
         }
     except struct.error:
         return None
@@ -61,8 +76,14 @@ def payload_to_complex(payload: bytes):
     # Interpret payload as little-endian int16 I,Q interleaved
     if len(payload) < 4:
         return np.array([], dtype=np.complex64)
-    nvals = len(payload) // 2
-    vals = np.frombuffer(payload[: nvals * 2], dtype='<i2').astype(np.float32)
+    # number of int16 values available
+    n_int16 = len(payload) // 2
+    # number of complex samples (pairs of int16 -> I,Q)
+    n_pairs = n_int16 // 2
+    if n_pairs == 0:
+        return np.array([], dtype=np.complex64)
+    bytes_to_use = n_pairs * 2 * 2  # n_pairs * (2 int16) * (2 bytes per int16)
+    vals = np.frombuffer(payload[:bytes_to_use], dtype='<i2').astype(np.float32)
     vals = vals.reshape(-1, 2)
     cplx = vals[:, 0] + 1j * vals[:, 1]
     return cplx
@@ -175,12 +196,27 @@ def main():
             data, addr = sock.recvfrom(65536)
             hdr = try_parse_header(data)
             if hdr is None:
+                # No valid header detected: treat entire UDP payload as raw IQ
+                payload = data
+                payload_len = len(payload)
+                now = time.time()
+                print(f"pkt from {addr} NO-HEADER bytes={payload_len} -- saving raw payload")
+                # Save raw packet for offline inspection
+                fname = os.path.join(SAVE_DIR, f"prach_nohdr_{addr[1]}_{int(time.time()*1000)}.bin")
+                try:
+                    with open(fname, 'wb') as f:
+                        f.write(payload)
+                except Exception as e:
+                    print(f"Failed to save raw no-header packet: {e}")
+                # skip grouping logic since we lack antenna/frame metadata
                 continue
 
             payload = hdr['payload']
             payload_len = len(payload)
             now = time.time()
-            print(f"pkt from {addr} ant={hdr['antenna']} fr={hdr['frame']} sl={hdr['slot']} occ={hdr['prachOcc']} bytes={payload_len}")
+            # include header-declared data_len (if present) to aid debugging
+            data_len_field = hdr.get('data_len', None)
+            print(f"pkt from {addr} ant={hdr['antenna']} fr={hdr['frame']} sl={hdr['slot']} occ={hdr['prachOcc']} bytes={payload_len} data_len_header={data_len_field}")
 
             # convert to complex
             cplx = payload_to_complex(payload)

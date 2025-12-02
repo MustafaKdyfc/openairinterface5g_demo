@@ -39,6 +39,7 @@
 #include "sockVars.h"
 #include <errno.h>
 #include <string.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
 
@@ -552,25 +553,9 @@ void rx_nr_prach_ru(RU_t *ru,
       }
     }
 
-    if (prach_sockfd >= 0) {
-      typedef struct {
-        uint32_t frame;
-        uint32_t slot;
-        uint8_t antenna;
-        uint8_t prachOccasion;
-        uint16_t N_ZC;
-        uint16_t data_len_bytes;
-      } __attribute__((packed)) prach_header_t;
-
-      prach_header_t header;
-      header.frame = htonl((uint32_t)frame);
-      header.slot = htonl((uint32_t)slot);
-      header.antenna = (uint8_t)aa;
-      header.prachOccasion = (uint8_t)prachOccasion;
-      header.N_ZC = htons((uint16_t)N_ZC);
-      uint32_t payload_bytes = (uint32_t)((size_t)N_ZC * 2 * sizeof(int16_t));
-      header.data_len_bytes = htons((uint16_t)payload_bytes);
-
+    /* Do not send raw PRACH from the RU path to avoid transmitting every
+     * PRACH buffer before detection. Keep local dumps for debugging only. */
+    {
       /* quick diagnostic: compute energy (sum of squares) to detect all-zero buffers */
       uint64_t raw_energy = 0;
       for (int ej = 0; ej < (N_ZC << 1); ej += 2) {
@@ -579,30 +564,10 @@ void rx_nr_prach_ru(RU_t *ru,
         raw_energy += (uint64_t)(re * re) + (uint64_t)(im * im);
       }
       if (raw_energy == 0) {
-        LOG_W(PHY, "PRACH RAW energy==0 ant%d fr=%d sl=%d occ=%d — skipping send\n", aa, frame, slot, prachOccasion);
+        LOG_W(PHY, "PRACH RAW energy==0 ant%d fr=%d sl=%d occ=%d — not sending (RU)\n", aa, frame, slot, prachOccasion);
       } else {
-        size_t total_size = sizeof(prach_header_t) + payload_bytes;
-        uint8_t *packet = malloc(total_size);
-
-        if (packet) {
-          memcpy(packet, &header, sizeof(prach_header_t));
-          memcpy(packet + sizeof(prach_header_t), raw_iq, payload_bytes);
-
-          ssize_t sent = sendto(prach_sockfd, packet, total_size, 0,
-                    (struct sockaddr*)&prach_server_addr, sizeof(prach_server_addr));
-          if (sent < 0) {
-            LOG_E(PHY, "Failed to send PRACH data ant%d: %s\n", aa, strerror(errno));
-          } else if ((size_t)sent != total_size) {
-            LOG_W(PHY, "Partial send ant%d: %zd/%zu bytes\n", aa, sent, total_size);
-          } else {
-            LOG_D(PHY, "Sent RAW PRACH ant%d: fr=%d sl=%d occ=%d size=%zu\n",
-              aa, frame, slot, prachOccasion, total_size);
-          }
-
-          free(packet);
-        } else {
-          LOG_E(PHY, "Failed to allocate packet buffer for antenna %d\n", aa);
-        }
+        LOG_D(PHY, "PRACH RAW energy=%llu ant%d fr=%d sl=%d occ=%d — dumped to /tmp (RU)\n",
+              (unsigned long long)raw_energy, aa, frame, slot, prachOccasion);
       }
     }
       
@@ -1090,6 +1055,93 @@ void rx_nr_prach(PHY_VARS_gNB *gNB,
     */
   
   
+  /* === Optional: forward raw per-antenna PRACH over UDP ONLY when a
+   * detected preamble equals 60. This avoids spamming the receiver with
+   * raw buffers for every PRACH occasion. The socket is lazily
+   * initialized by `prach_socket_init` (weak fallback above) if needed.
+   */
+  do {
+    /* Ensure we have a valid PRACH socket (lazy init) */
+    if (prach_sockfd < 0) {
+      if (prach_socket_init("127.0.0.1", 5678) < 0) {
+        LOG_W(PHY, "PRACH: prach_socket_init failed, skipping UDP forward\n");
+        break;
+      } else {
+        LOG_I(PHY, "PRACH: lazy socket initialized to 127.0.0.1:5678 for forwarding\n");
+      }
+    }
+
+    /* Only forward when detected preamble equals 60 */
+    if ((uint16_t)(*max_preamble) == 60) {
+      const size_t nbytes = (size_t)N_ZC * 2 * sizeof(int16_t); /* N_ZC complex samples */
+      LOG_I(PHY, "[PRACH-RAW] Forwarding raw PRACH (preamble=60) nb_rx=%d N_ZC=%u bytes=%zu at %d.%d\n", nb_rx, (unsigned)N_ZC, nbytes, frame, slot);
+
+      for (int aa = 0; aa < nb_rx; aa++) {
+        const int16_t *iq = (const int16_t *)rxsigF[aa];
+        /* Build a 14-byte header (network order) and prepend a 4-byte
+         * magic "PRCH" so the receiver can reliably detect valid
+         * PRACH-RAW packets. Final header on the wire is:
+         *  4 bytes magic 'P' 'R' 'C' 'H'
+         *  4 bytes frame (network)
+         *  4 bytes slot  (network)
+         *  1 byte  antenna
+         *  1 byte  prachOccasion
+         *  2 bytes N_ZC (network)
+         *  2 bytes data_len (number of int16 values, network)
+         */
+        uint16_t data_len_field = (uint16_t)(N_ZC * 2); /* int16 count */
+        uint8_t hdr[14];
+        uint32_t f_n = htonl((uint32_t)frame);
+        uint32_t s_n = htonl((uint32_t)slot);
+        memcpy(hdr + 0, &f_n, 4);
+        memcpy(hdr + 4, &s_n, 4);
+        hdr[8] = (uint8_t)aa; /* antenna index (0-based) */
+        hdr[9] = (uint8_t)prachOccasion;
+        uint16_t N_ZC_n = htons((uint16_t)N_ZC);
+        memcpy(hdr + 10, &N_ZC_n, 2);
+        uint16_t dl_n = htons(data_len_field);
+        memcpy(hdr + 12, &dl_n, 2);
+        const uint8_t magic[4] = {'P','R','C','H'};
+
+        /* Build payload by extracting N_ZC complex samples from the
+         * frequency-domain buffer starting at subcarrier index `k` (as in
+         * the RU path). This matches the receiver's expectation and
+         * avoids issues caused by earlier CP removal/DFT alignment.
+         */
+        size_t bytes_payload = (size_t)data_len_field * sizeof(int16_t);
+        size_t total = 4 + 14 + bytes_payload; /* magic + header + payload */
+        uint8_t *buf = malloc(total);
+        if (!buf) {
+          LOG_E(PHY, "[PRACH-RAW] malloc failed for ant %d\n", aa);
+          continue;
+        }
+        memcpy(buf, magic, 4);
+        memcpy(buf + 4, hdr, 14);
+
+        /* For now copy the first bytes_payload bytes from rxsigF[aa].
+         * This keeps the wire format consistent (magic+header+IQ)
+         * while avoiding reliance on internal k/dftlen alignment.
+         */
+        const int16_t *iq_ptr = (const int16_t *)rxsigF[aa];
+        memcpy(buf + 4 + 14, (const void *)iq_ptr, bytes_payload);
+
+        ssize_t sent = sendto(prach_sockfd, buf, total, 0,
+                              (struct sockaddr *)&prach_server_addr,
+                              sizeof(prach_server_addr));
+        if (sent == (ssize_t)total) {
+          LOG_D(PHY, "[PRACH-RAW] ant %d: %zd bytes sent (incl header)\n", aa, sent);
+        } else {
+          LOG_E(PHY, "[PRACH-RAW] ant %d FAILED: %zd/%zu (%s)\n",
+                aa, sent, total, sent < 0 ? strerror(errno) : "partial");
+        }
+        free(buf);
+        usleep(1000); /* 1ms gap between antenna forwards */
+      }
+    } else {
+      LOG_D(PHY, "[PRACH-RAW] Detected preamble=%u != 60; not forwarding\n", (unsigned)(*max_preamble));
+    }
+  } while (0);
+
   stop_meas(&gNB->rx_prach);
 
 }
